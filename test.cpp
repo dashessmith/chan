@@ -1,8 +1,3 @@
-# chan
-go style c++17 Chan\
-go style c++17 WaitGroup 
-
-```c++
 #include "chan.hpp"
 #include "wait_group.hpp"
 #include <cstdio>
@@ -30,4 +25,3 @@ int main() {
     printf("wait group done\n");
     return 0;
 }
-```
