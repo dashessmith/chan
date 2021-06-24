@@ -19,7 +19,7 @@ class Chan {
           regular interface
 
      **************************************/
-    // if size == 0 , it becomes block chan forever
+    // if size == 0 , it becomes synchronous channel
     Chan(size_t size = 0);
 
     ~Chan(); // calls close
