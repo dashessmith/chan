@@ -2,31 +2,29 @@
 
 #include <condition_variable>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <utility>
-
+namespace go {
 /*
     GO style wait group
  */
 class WaitGroup {
-    using TogetherFunc = std::function<void(size_t tidx, size_t nt)>;
-    using GoFunc = std::function<void()>;
 
   public:
-    WaitGroup() = default;
-    WaitGroup(TogetherFunc &&f);
-    WaitGroup(GoFunc &&f);
     ~WaitGroup();
 
     void add(size_t n = 1);
 
     void done();
 
-    WaitGroup &go(GoFunc &&f);
+    void go(std::function<void()> &&f);
 
-    WaitGroup &together(TogetherFunc &&f,
-                        size_t nt = std::thread::hardware_concurrency());
+    void
+    together(std::function<void(size_t thread_idx, size_t num_threads)> &&f,
+             std::function<void()> &&final = nullptr,
+             size_t nt = std::thread::hardware_concurrency());
     void wait();
 
   private:
@@ -34,12 +32,6 @@ class WaitGroup {
     std::mutex mtx_;
     std::condition_variable cv_;
 };
-
-WaitGroup::WaitGroup(TogetherFunc &&f) {
-    this->together(std::forward<TogetherFunc>(f));
-}
-
-WaitGroup::WaitGroup(GoFunc &&f) { this->go(std::forward<GoFunc>(f)); }
 
 WaitGroup::~WaitGroup() {
     // debug("???\n");
@@ -60,7 +52,7 @@ void WaitGroup::done() {
     }
     cv_.notify_all();
 }
-WaitGroup &WaitGroup::go(GoFunc &&f) {
+void WaitGroup::go(std::function<void()> &&f) {
     add();
     std::thread([this, f] {
         try {
@@ -71,17 +63,28 @@ WaitGroup &WaitGroup::go(GoFunc &&f) {
             throw;
         }
     }).detach();
-    return *this;
 }
 
-WaitGroup &WaitGroup::together(WaitGroup::TogetherFunc &&f, size_t nt) {
-    for (size_t tidx = 0; tidx < nt; tidx++) {
-        this->go([tidx, nt, f] { f(tidx, nt); });
+void WaitGroup::together(
+    std::function<void(size_t thread_idx, size_t num_threads)> &&f,
+    std::function<void()> &&final, size_t nt) {
+    if (!final) {
+        for (size_t tidx = 0; tidx < nt; tidx++) {
+            this->go([tidx, nt, f] { f(tidx, nt); });
+        }
+        return;
     }
-    return *this;
+    auto inner = std::make_shared<WaitGroup>();
+    inner->together([f](size_t tidx, size_t nthds) { f(tidx, nthds); }, nullptr,
+                    nt);
+    this->go([inner, final]() {
+        inner->wait();
+        final();
+    });
 }
 
 void WaitGroup::wait() {
     std::unique_lock<std::mutex> ul(mtx_);
     cv_.wait(ul, [this] { return count_ <= 0; });
 }
+} // namespace go
