@@ -18,8 +18,7 @@ int main() {
     for (auto v : std::vector<bool>{false})
         for (auto count : std::vector<int>{1000000})
             for (auto nth : std::vector<size_t>{1, num_threads})
-                for (auto csize :
-                     std::vector<size_t>{0, 1, 100, 200, 300, 1000}) {
+                for (auto csize : std::vector<size_t>{0, 1}) {
                     Chan<int> c{csize};
                     auto d = fcount([&]() {
                         std::vector<int> collected;
