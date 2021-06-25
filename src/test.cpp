@@ -14,39 +14,47 @@ std::chrono::steady_clock::duration fcount(std::function<void()> f) {
 }
 
 int main() {
-
-    for (auto v : std::vector<bool>{false})
+    auto num_threads = std::thread::hardware_concurrency();
+    for (auto v : std::vector<bool>{true, false})
         for (auto count : std::vector<int>{1000000})
-            for (auto nth :
-                 std::vector<size_t>{1, std::thread::hardware_concurrency()})
-                for (auto csize : std::vector<size_t>{0, 1, 1024}) {
+            for (auto nth : std::vector<size_t>{1, num_threads})
+                for (auto csize : std::vector<size_t>{1, 1024}) {
+                    Chan<int> c{csize};
                     auto d = fcount([&]() {
                         std::vector<int> collected;
                         std::mutex collected_mtx;
-                        Chan<int> c{csize};
                         WaitGroup wg{};
                         if (nth <= 1) {
                             wg.go([&c, &count]() {
+                                // std::cout << "producer start\n";
                                 for (auto i = 0; i < count; i++) {
                                     c.push(i);
                                 }
+                                // std::cout << "before close\n";
                                 c.close();
+                                // std::cout << "producer quit\n";
                             });
-                            wg.go([&c, &v, &collected, &collected_mtx]() {
-                                for (auto n : c) {
-                                    if (v) {
-                                        collected_mtx.lock();
-                                        collected.emplace_back(n);
-                                        collected_mtx.unlock();
+                            wg.go(
+                                [&c, &v, &collected, &collected_mtx, &count]() {
+                                    // std::this_thread::sleep_for(
+                                    // std::chrono::seconds(1));
+                                    // std::cout << "consumer start\n";
+                                    for (auto n : c) {
+                                        // std::cout << "n = " << n << "\n";
+                                        if (v) {
+                                            collected_mtx.lock();
+                                            collected.emplace_back(n);
+                                            collected_mtx.unlock();
+                                        }
                                     }
-                                }
-                            });
+                                    // std::cout << "consumer quit\n";
+                                });
 
                         } else {
                             wg.together(
                                 [&c, &count](size_t tidx, size_t nthds) {
                                     for (auto i = tidx; i < count; i += nthds) {
-                                        c.push(i);
+                                        c.push((int)i);
                                     }
                                 },
                                 [&c]() { c.close(); }, nth);
@@ -63,7 +71,9 @@ int main() {
                                 },
                                 nullptr, nth);
                         }
+                        // std::cout << "wait group start wait\n";
                         wg.wait();
+                        // std::cout << "wait group done\n";
                         if (v) {
                             sort(collected.begin(), collected.end());
                             for (auto i = 0; i < count; i++) {
