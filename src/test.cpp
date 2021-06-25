@@ -15,10 +15,10 @@ std::chrono::steady_clock::duration fcount(std::function<void()> f) {
 
 int main() {
     auto num_threads = std::thread::hardware_concurrency();
-    for (auto v : std::vector<bool>{true, false})
+    for (auto v : std::vector<bool>{false})
         for (auto count : std::vector<int>{1000000})
-            for (auto nth : std::vector<size_t>{1, num_threads})
-                for (auto csize : std::vector<size_t>{1, 1024}) {
+            for (auto nth : std::vector<size_t>{num_threads})
+                for (auto csize : std::vector<size_t>{1, 100, 200, 300, 1000}) {
                     Chan<int> c{csize};
                     auto d = fcount([&]() {
                         std::vector<int> collected;
