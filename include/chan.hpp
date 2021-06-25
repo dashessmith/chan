@@ -72,7 +72,7 @@ class Chan {
     bool _try_push(T &&t);
     bool closed_ = false;
     std::mutex wmtx_;
-    std::mutex rmtx_;
+    // std::mutex rmtx_;
     std::condition_variable wcv_;
     std::condition_variable rcv_;
     std::function<T()> receiver_ = nullptr; // for size_ == 0
@@ -139,17 +139,11 @@ bool Chan<T>::_push(T &&t) {
             return false;
         }
         receiver_ = [&t]() { return std::move(t); };
+        ul.unlock();
         rcv_.notify_one();
+        ul.lock();
         receiver_cv_.wait(
             ul, [this]() { return (closed_ || receiver_ == nullptr); });
-        // do {
-        //     rcv_.notify_one();
-        // } while (
-        //     !receiver_cv_.wait_for(ul, std::chrono::milliseconds(1), [this]()
-        //     {
-        //         return (closed_ || receiver_ == nullptr);
-        //     }));
-
         if (receiver_) {
             receiver_ = nullptr;
             ul.unlock();
@@ -285,7 +279,7 @@ bool Chan<T>::operator<<(T &&t) {
 template <class T>
 std::optional<T> Chan<T>::pop() {
     if (size_ <= 0) {
-        std::unique_lock<std::mutex> ul{rmtx_};
+        std::unique_lock<std::mutex> ul{wmtx_};
         rcv_.wait(ul, [this]() { return closed_ || receiver_ != nullptr; });
         if (receiver_) {
             std::optional<T> ret{std::move(receiver_())};
