@@ -8,7 +8,7 @@
 #include <queue>
 #include <utility>
 
-namespace go {
+namespace goxx {
 /*
         GO style chan
 
@@ -329,4 +329,4 @@ typename Chan<T>::Iterator Chan<T>::end() {
     return Iterator(*this);
 }
 
-} // namespace go
+} // namespace goxx

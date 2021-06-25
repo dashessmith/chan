@@ -6,7 +6,7 @@
 #include <mutex>
 #include <thread>
 #include <utility>
-namespace go {
+namespace goxx {
 /*
     GO style wait group
  */
@@ -87,4 +87,4 @@ void WaitGroup::wait() {
     std::unique_lock<std::mutex> ul(mtx_);
     cv_.wait(ul, [this] { return count_ <= 0; });
 }
-} // namespace go
+} // namespace goxx

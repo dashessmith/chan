@@ -1,11 +1,11 @@
-#include "go.hpp"
+#include "goxx.hpp"
 #include <chrono>
 #include <cstdio>
 #include <deque>
 #include <iostream>
 #include <mutex>
 
-using namespace go;
+using namespace goxx;
 
 std::chrono::steady_clock::duration fcount(std::function<void()> f) {
     auto t = std::chrono::steady_clock::now();
