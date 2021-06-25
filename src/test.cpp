@@ -18,7 +18,8 @@ int main() {
     for (auto v : std::vector<bool>{false})
         for (auto count : std::vector<int>{1000000})
             for (auto nth : std::vector<size_t>{1, num_threads})
-                for (auto csize : std::vector<size_t>{1, 100, 200, 300, 1000}) {
+                for (auto csize :
+                     std::vector<size_t>{0, 1, 100, 200, 300, 1000}) {
                     Chan<int> c{csize};
                     auto d = fcount([&]() {
                         std::vector<int> collected;
@@ -26,28 +27,20 @@ int main() {
                         WaitGroup wg{};
                         if (nth <= 1) {
                             wg.go([&c, &count]() {
-                                // std::cout << "producer start\n";
                                 for (auto i = 0; i < count; i++) {
                                     c.push(i);
                                 }
-                                // std::cout << "before close\n";
                                 c.close();
-                                // std::cout << "producer quit\n";
                             });
                             wg.go(
                                 [&c, &v, &collected, &collected_mtx, &count]() {
-                                    // std::this_thread::sleep_for(
-                                    // std::chrono::seconds(1));
-                                    // std::cout << "consumer start\n";
                                     for (auto n : c) {
-                                        // std::cout << "n = " << n << "\n";
                                         if (v) {
                                             collected_mtx.lock();
                                             collected.emplace_back(n);
                                             collected_mtx.unlock();
                                         }
                                     }
-                                    // std::cout << "consumer quit\n";
                                 });
 
                         } else {
@@ -71,9 +64,7 @@ int main() {
                                 },
                                 nullptr, nth);
                         }
-                        // std::cout << "wait group start wait\n";
                         wg.wait();
-                        // std::cout << "wait group done\n";
                         if (v) {
                             sort(collected.begin(), collected.end());
                             for (auto i = 0; i < count; i++) {
@@ -84,7 +75,6 @@ int main() {
                                     throw std::runtime_error("assert failed");
                                 }
                             }
-                            // std::cout << " result ok\n";
                         }
                     });
                     if (!v) {
