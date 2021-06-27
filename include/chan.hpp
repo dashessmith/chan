@@ -1,8 +1,11 @@
 
 #pragma once
 
+#include <cassert>
+#include <chrono>
 #include <condition_variable>
 #include <functional>
+#include <iostream>
 #include <mutex>
 #include <optional>
 #include <queue>
@@ -54,7 +57,7 @@ class Chan {
         friend class Chan;
 
       public:
-        inline bool operator!=(const Iterator &end) const;
+        inline bool operator!=(const Iterator &end);
         inline void operator++();
         inline T operator*();
 
@@ -72,13 +75,12 @@ class Chan {
     bool _try_push(T &&t);
     bool closed_ = false;
     std::mutex wmtx_;
-    std::mutex rmtx_;
-    std::mutex receivermtx_;
+    // std::mutex wmtx_;
     std::condition_variable wcv_;
     std::condition_variable rcv_;
-    std::condition_variable receiver_cv_;
-    std::function<T()> receiver_ = nullptr;
-    bool receiver_called_ = false;
+    std::condition_variable receiver_wcv_;
+    std::function<T && ()> receiver_ = nullptr;
+    // std::function<T && ()> receiver_ = nullptr;
     std::vector<std::optional<T>> v_;
     size_t readpos_ = 0;
     size_t writepos_ = 0;
@@ -129,29 +131,43 @@ template <class T>
 bool Chan<T>::_push(T &&t) {
     if (v_.empty()) {
         std::unique_lock<std::mutex> ul{wmtx_};
-        wcv_.wait(ul, [this]() { return (closed_ || receiver_ == nullptr); });
+        wcv_.wait(ul, [this]() { return (closed_ || !receiver_); });
         if (closed_) {
             ul.unlock();
             _ntfclose();
             return false;
         }
-        {
-            std::unique_lock<std::mutex> rul{rmtx_};
-            receiver_ = [&t]() { return std::move(t); };
-            rcv_.notify_one();
-            receiver_cv_.wait(
-                rul, [this]() { return (closed_ || receiver_called_); });
+        receiver_ = [t = std::move(t)]() mutable -> T && {
+            return std::move(t);
+        };
+
+        rcv_.notify_one();
+        receiver_wcv_.wait(ul, [this]() { return (closed_ || !receiver_); });
+
+        // auto trytimes = 0;
+        // do {
+        //     rcv_.notify_one();
+        //     trytimes++;
+        //     assert(trytimes <= 100);
+        //     // std::cout << "try " << trytimes << "\n";
+        // } while (!receiver_wcv_.wait_for(ul, std::chrono::seconds(1),
+        // [this]() {
+        //     return (closed_ || !receiver_);
+        // }));
+        // if (trytimes > 1) {
+        //     std::cout << "try times " << trytimes << "\n";
+        // }
+
+        if (receiver_) {
             receiver_ = nullptr;
-            if (!receiver_called_) {
-                ul.unlock();
-                _ntfclose();
-                return false;
-            }
-            receiver_called_ = false;
             ul.unlock();
-            wcv_.notify_one();
-            return true;
+            _ntfclose();
+            // std::cout << "producer detect close\n";
+            return false;
         }
+        ul.unlock();
+        wcv_.notify_one();
+        return true;
     }
     std::unique_lock<std::mutex> ul{wmtx_};
     wcv_.wait(ul, [this]() { return closed_ || !v_[writepos_]; });
@@ -194,23 +210,21 @@ bool Chan<T>::_try_push(T &&t) {
     if (v_.empty()) {
         if (receiver_)
             return false;
-        {
-            std::unique_lock<std::mutex> rul{rmtx_};
-            receiver_ = [&t]() { return std::move(t); };
-            rcv_.notify_one();
-            receiver_cv_.wait(
-                rul, [this]() { return (closed_ || receiver_called_); });
+
+        receiver_ = [t = std::move(t)]() mutable -> T && {
+            return std::move(t);
+        };
+        rcv_.notify_one();
+        receiver_wcv_.wait(ul, [this]() { return (closed_ || !receiver_); });
+        if (receiver_) {
             receiver_ = nullptr;
-            if (!receiver_called_) {
-                ul.unlock();
-                _ntfclose();
-                return false;
-            }
-            receiver_called_ = false;
             ul.unlock();
-            wcv_.notify_one();
-            return true;
+            _ntfclose();
+            return false;
         }
+        ul.unlock();
+        wcv_.notify_one();
+        return true;
     }
     if (v_[writepos_])
         return false;
@@ -235,15 +249,19 @@ bool Chan<T>::operator<<(T &&t) {
 template <class T>
 std::optional<T> Chan<T>::pop() {
     if (v_.empty()) {
-        std::unique_lock<std::mutex> ul{rmtx_};
-        rcv_.wait(ul, [this]() { return closed_ || receiver_ != nullptr; });
+        receiver_wcv_.notify_one();
+        std::unique_lock<std::mutex> ul{wmtx_};
+        rcv_.wait(ul, [this]() mutable { return closed_ || receiver_; });
+        // std::cout << "consumer wake up\n";
         if (receiver_) {
             std::optional<T> ret{std::move(receiver_())};
-            receiver_called_ = true;
+            receiver_ = nullptr;
             ul.unlock();
-            receiver_cv_.notify_one();
+            receiver_wcv_.notify_one();
             return std::move(ret);
         }
+        // std::cout << "closed ? " << closed_ << ", receiver ?"
+        //           << (receiver_ != nullptr) << "\n";
         ul.unlock();
         _ntfclose();
         return std::optional<T>{};
@@ -271,14 +289,15 @@ std::optional<T> Chan<T>::pop() {
 template <class T>
 std::optional<T> Chan<T>::try_pop() {
     if (v_.empty()) {
-        std::unique_lock<std::mutex> ul{rmtx_, std::defer_lock};
+        std::unique_lock<std::mutex> ul{wmtx_, std::defer_lock};
         if (!ul.try_lock)
             return false;
+        receiver_wcv_.notify_one();
         if (receiver_) {
-            std::optional<T> ret{std::move(receiver_())};
+            std::optional<T> ret{std::move(*receiver_)};
             receiver_called_ = true;
             ul.unlock();
-            receiver_cv_.notify_one();
+            receiver_wcv_.notify_one();
             return std::move(ret);
         }
         if (closed_) {
@@ -315,16 +334,15 @@ template <class T>
 void Chan<T>::_ntfclose() {
     wcv_.notify_one();
     rcv_.notify_one();
-    receiver_cv_.notify_one();
+    receiver_wcv_.notify_one();
 }
 /* range expression */
 
 /* != */
 template <class T>
-bool Chan<T>::Iterator::operator!=(const Chan<T>::Iterator &_) const {
-    auto self = const_cast<Chan<T>::Iterator *>(this);
-    self->tmp_ = self->c_.pop();
-    return self->tmp_.has_value();
+bool Chan<T>::Iterator::operator!=(const Chan<T>::Iterator &_) {
+    this->tmp_ = this->c_.pop();
+    return this->tmp_.has_value();
 }
 
 /* iterate */

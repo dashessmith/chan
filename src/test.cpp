@@ -14,9 +14,10 @@ std::chrono::steady_clock::duration fcount(std::function<void()> f) {
 }
 
 int main() {
+    Chan<void *> ch;
     auto num_threads = std::thread::hardware_concurrency();
-    for (auto v : std::vector<bool>{false})
-        for (auto count : std::vector<int>{1000000})
+    for (auto v : std::vector<bool>{false, true})
+        for (auto count : std::vector<int>{100000})
             for (auto nth : std::vector<size_t>{1, num_threads})
                 for (auto csize : std::vector<size_t>{0, 1}) {
                     Chan<int> c{csize};
@@ -40,6 +41,7 @@ int main() {
                                             collected_mtx.unlock();
                                         }
                                     }
+                                    std::cout << " consumer quit\n";
                                 });
 
                         } else {
