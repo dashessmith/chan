@@ -5,7 +5,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <functional>
-#include <iostream>
+//#include <iostream>
 #include <mutex>
 #include <optional>
 #include <queue>
@@ -70,17 +70,34 @@ class Chan {
     Iterator end();
 
   private:
+    /* producer */
+    // template <class T>
+    // class Producer {
+
+    //   public:
+    //     T *t_;
+    //     std::mutex mtx_;
+    //     std::condition_variable cv_;
+    // };
+    // std::queue<*Producer<T>> producers_;
+
+    std::optional<T> pop_unbuffered();
     void _ntfclose();
+    bool _push_unbuffered(T &&t);
     bool _push(T &&t);
     bool _try_push(T &&t);
     bool closed_ = false;
     std::mutex wmtx_;
-    // std::mutex wmtx_;
+    // std::mutex rmtx_;
+    // std::mutex umtx_;
     std::condition_variable wcv_;
     std::condition_variable rcv_;
-    std::condition_variable receiver_wcv_;
-    std::function<T && ()> receiver_ = nullptr;
-    // std::function<T && ()> receiver_ = nullptr;
+    std::condition_variable ucv_;
+    // std::function<T && ()> ub_ = nullptr;
+    T *ub_ = nullptr;
+    inline constexpr T *_make_ub(T &&t);
+    inline T &&_deref_ub(T *ub);
+    // std::function<T && ()> ub_ = nullptr;
     std::vector<std::optional<T>> v_;
     size_t readpos_ = 0;
     size_t writepos_ = 0;
@@ -104,7 +121,7 @@ bool Chan<T>::is_closed() {
 template <class T>
 bool Chan<T>::empty() {
     std::unique_lock<std::mutex> _(wmtx_);
-    return closed_ && receiver_ == nullptr && l_.empty();
+    return closed_ && ub_ == nullptr && l_.empty();
 }
 
 template <class T>
@@ -128,46 +145,47 @@ bool Chan<T>::push(T &&t) {
 }
 
 template <class T>
+bool Chan<T>::_push_unbuffered(T &&t) {
+    std::unique_lock<std::mutex> wul{wmtx_};
+    wcv_.wait(wul, [this]() { return (closed_ || !ub_); });
+    if (closed_) {
+        wul.unlock();
+        _ntfclose();
+        return false;
+    }
+
+    {
+        // std::unique_lock<std::mutex> uul{wmtx_};
+        ub_ = _make_ub(std::move(t));
+        rcv_.notify_one();
+        // std::this_thread::yield();
+        ucv_.wait(wul, [this]() mutable {
+            return closed_ || !ub_;
+            // auto res = (closed_ || !ub_);
+            // if (!res && !ub_) {
+            //     //std::cout << "!ub_ ?" << (!ub_) << "\n";
+            // }
+            // return res;
+        });
+        rcv_.notify_one();
+        if (ub_) {
+            ub_ = nullptr;
+            // uul.unlock();
+            wul.unlock();
+            _ntfclose();
+            return false;
+        }
+    }
+
+    wul.unlock();
+    wcv_.notify_one();
+    return true;
+}
+
+template <class T>
 bool Chan<T>::_push(T &&t) {
     if (v_.empty()) {
-        std::unique_lock<std::mutex> ul{wmtx_};
-        wcv_.wait(ul, [this]() { return (closed_ || !receiver_); });
-        if (closed_) {
-            ul.unlock();
-            _ntfclose();
-            return false;
-        }
-        receiver_ = [t = std::move(t)]() mutable -> T && {
-            return std::move(t);
-        };
-
-        rcv_.notify_one();
-        receiver_wcv_.wait(ul, [this]() { return (closed_ || !receiver_); });
-
-        // auto trytimes = 0;
-        // do {
-        //     rcv_.notify_one();
-        //     trytimes++;
-        //     assert(trytimes <= 100);
-        //     // std::cout << "try " << trytimes << "\n";
-        // } while (!receiver_wcv_.wait_for(ul, std::chrono::seconds(1),
-        // [this]() {
-        //     return (closed_ || !receiver_);
-        // }));
-        // if (trytimes > 1) {
-        //     std::cout << "try times " << trytimes << "\n";
-        // }
-
-        if (receiver_) {
-            receiver_ = nullptr;
-            ul.unlock();
-            _ntfclose();
-            // std::cout << "producer detect close\n";
-            return false;
-        }
-        ul.unlock();
-        wcv_.notify_one();
-        return true;
+        return _push_unbuffered(std::move(t));
     }
     std::unique_lock<std::mutex> ul{wmtx_};
     wcv_.wait(ul, [this]() { return closed_ || !v_[writepos_]; });
@@ -208,16 +226,14 @@ bool Chan<T>::_try_push(T &&t) {
         return false;
     }
     if (v_.empty()) {
-        if (receiver_)
+        if (ub_)
             return false;
 
-        receiver_ = [t = std::move(t)]() mutable -> T && {
-            return std::move(t);
-        };
+        ub_ = _make_ub(std::move(t));
         rcv_.notify_one();
-        receiver_wcv_.wait(ul, [this]() { return (closed_ || !receiver_); });
-        if (receiver_) {
-            receiver_ = nullptr;
+        ucv_.wait(ul, [this]() { return (closed_ || !ub_); });
+        if (ub_) {
+            ub_ = nullptr;
             ul.unlock();
             _ntfclose();
             return false;
@@ -247,24 +263,29 @@ bool Chan<T>::operator<<(T &&t) {
 }
 
 template <class T>
+std::optional<T> Chan<T>::pop_unbuffered() {
+    ucv_.notify_one();
+    std::unique_lock<std::mutex> ul{wmtx_};
+    rcv_.wait(ul, [this]() mutable { return closed_ || ub_; });
+    // std::cout << "consumer wake up\n";
+    if (ub_) {
+        std::optional<T> ret{_deref_ub(ub_)};
+        // std::optional<T> ret{std::move(*ub_)};
+        ub_ = nullptr;
+        ul.unlock();
+        ucv_.notify_one();
+        return std::move(ret);
+    }
+    // std::cout << "closed ? " << closed_ << ", receiver ?"
+    //           << (ub_ != nullptr) << "\n";
+    ul.unlock();
+    _ntfclose();
+    return std::optional<T>{};
+}
+template <class T>
 std::optional<T> Chan<T>::pop() {
     if (v_.empty()) {
-        receiver_wcv_.notify_one();
-        std::unique_lock<std::mutex> ul{wmtx_};
-        rcv_.wait(ul, [this]() mutable { return closed_ || receiver_; });
-        // std::cout << "consumer wake up\n";
-        if (receiver_) {
-            std::optional<T> ret{std::move(receiver_())};
-            receiver_ = nullptr;
-            ul.unlock();
-            receiver_wcv_.notify_one();
-            return std::move(ret);
-        }
-        // std::cout << "closed ? " << closed_ << ", receiver ?"
-        //           << (receiver_ != nullptr) << "\n";
-        ul.unlock();
-        _ntfclose();
-        return std::optional<T>{};
+        return std::move(pop_unbuffered());
     }
     std::unique_lock<std::mutex> ul{wmtx_};
     rcv_.wait(ul, [this]() { return closed_ || v_[readpos_]; });
@@ -292,12 +313,12 @@ std::optional<T> Chan<T>::try_pop() {
         std::unique_lock<std::mutex> ul{wmtx_, std::defer_lock};
         if (!ul.try_lock)
             return false;
-        receiver_wcv_.notify_one();
-        if (receiver_) {
-            std::optional<T> ret{std::move(*receiver_)};
+        ucv_.notify_one();
+        if (ub_) {
+            std::optional<T> ret{std::move(*ub_)};
             receiver_called_ = true;
             ul.unlock();
-            receiver_wcv_.notify_one();
+            ucv_.notify_one();
             return std::move(ret);
         }
         if (closed_) {
@@ -331,10 +352,19 @@ std::optional<T> Chan<T>::try_pop() {
 }
 
 template <class T>
+constexpr T *Chan<T>::_make_ub(T &&t) {
+    return &t;
+}
+template <class T>
+T &&Chan<T>::_deref_ub(T *ub) {
+    return std::move(*ub);
+}
+
+template <class T>
 void Chan<T>::_ntfclose() {
     wcv_.notify_one();
     rcv_.notify_one();
-    receiver_wcv_.notify_one();
+    ucv_.notify_one();
 }
 /* range expression */
 
