@@ -17,9 +17,9 @@ int main() {
     Chan<void *> ch;
     auto num_threads = std::thread::hardware_concurrency();
     for (auto v : std::vector<bool>{false, true})
-        for (auto count : std::vector<int>{100000})
+        for (auto count : std::vector<int>{100000, 1000000})
             for (auto nth : std::vector<size_t>{1, num_threads})
-                for (auto csize : std::vector<size_t>{0, 1}) {
+                for (auto csize : std::vector<size_t>{0, 1, 1024}) {
                     Chan<int> c{csize};
                     auto d = fcount([&]() {
                         std::vector<int> collected;
@@ -66,6 +66,7 @@ int main() {
                                 nullptr, nth);
                         }
                         wg.wait();
+                        std::cout << "wait group quit\n";
                         if (v) {
                             sort(collected.begin(), collected.end());
                             for (auto i = 0; i < count; i++) {
