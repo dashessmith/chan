@@ -27,27 +27,27 @@ class Chan {
           regular interface
 
      **************************************/
-    // if size == 0 , it becomes synchronous channel
-    Chan(size_t size = 0);
+    // if size == 0 , it becomes synchronous unbuffered channel
+    inline Chan(size_t size = 0);
 
-    ~Chan(); // calls close
+    inline ~Chan(); // calls close
 
-    void close();     // set closed_
-    bool is_closed(); // check closed_
-    bool empty();     // check l_.empty && closed_
-    operator bool();  // check !(l_.empty && closed_)
+    inline void close();     // set closed_
+    inline bool is_closed(); // check closed_
+    inline bool empty();     // check l_.empty && closed_
+    inline operator bool();  // check !(l_.empty && closed_)
 
-    bool push(const T &t);
-    bool push(T &&t);
+    inline bool push(const T &t);
+    inline bool push(T &&t);
 
-    bool operator<<(const T &t);
-    bool operator<<(T &&t);
+    inline bool operator<<(const T &t);
+    inline bool operator<<(T &&t);
 
-    bool try_push(const T &t);
-    bool try_push(T &&t);
+    inline bool try_push(const T &t);
+    inline bool try_push(T &&t);
 
-    std::optional<T> pop();
-    std::optional<T> try_pop();
+    inline std::optional<T> pop();
+    inline std::optional<T> try_pop();
 
     /***************************************
          range expression
@@ -60,7 +60,7 @@ class Chan {
         friend class Chan;
 
       public:
-        inline bool operator!=(const Iterator &end);
+        inline bool operator!=(const Iterator &end) const;
         inline void operator++();
         inline T operator*();
 
@@ -69,8 +69,8 @@ class Chan {
         Chan<T> &c_;
         std::optional<T> tmp_;
     };
-    Iterator begin();
-    Iterator end();
+    inline Iterator begin();
+    inline Iterator end();
 
   private:
     struct Consumer_ {
@@ -78,9 +78,9 @@ class Chan {
         std::optional<T> t_;
         std::condition_variable cv_;
     };
-    void ntfclose_();
-    Consumer_ *popc_();
-    std::optional<T> popb_();
+    inline void ntfclose_();
+    inline Consumer_ *popc_();
+    inline std::optional<T> popb_();
     bool closed_ = false;
     std::mutex wmtx_;
     std::condition_variable wcv_;
@@ -303,14 +303,15 @@ std::optional<T> Chan<T>::popb_() {
 
 /* != */
 template <class T>
-bool Chan<T>::Iterator::operator!=(const Chan<T>::Iterator &_) {
-    this->tmp_ = this->c_.pop();
-    return this->tmp_.has_value();
+bool Chan<T>::Iterator::operator!=(const Chan<T>::Iterator &) const {
+    return tmp_.has_value();
 }
 
 /* iterate */
 template <class T>
-void Chan<T>::Iterator::operator++() {}
+void Chan<T>::Iterator::operator++() {
+    tmp_ = c_.pop();
+}
 
 template <class T>
 T Chan<T>::Iterator::operator*() {
@@ -324,13 +325,15 @@ Chan<T>::Iterator::Iterator(Chan<T> &c) : c_(c) {}
 /* begin iterator */
 template <class T>
 typename Chan<T>::Iterator Chan<T>::begin() {
-    return Iterator(*this);
+    Iterator res{*this};
+    res.tmp_ = pop();
+    return res;
 }
 
 /* end iterator */
 template <class T>
 typename Chan<T>::Iterator Chan<T>::end() {
-    return Iterator(*this);
+    return Iterator{*this};
 }
 
 } // namespace goxx
