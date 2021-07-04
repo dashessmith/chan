@@ -114,6 +114,7 @@ Chan<T>::operator bool() {
 
 template <class T>
 void Chan<T>::close() {
+    std::unique_lock<std::mutex> ul(wmtx_);
     closed_ = true;
     ntfclose_();
 }
