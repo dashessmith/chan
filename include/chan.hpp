@@ -5,11 +5,14 @@
 #include <chrono>
 #include <condition_variable>
 #include <functional>
-//#include <iostream>
+#include <list>
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <unordered_set>
 #include <utility>
+
+#include "defer.hpp"
 
 namespace goxx {
 /*
@@ -70,43 +73,24 @@ class Chan {
     Iterator end();
 
   private:
-    /* producer */
-    // template <class T>
-    // class Producer {
-
-    //   public:
-    //     T *t_;
-    //     std::mutex mtx_;
-    //     std::condition_variable cv_;
-    // };
-    // std::queue<*Producer<T>> producers_;
-
-    std::optional<T> pop_unbuffered();
-    void _ntfclose();
-    bool _push_unbuffered(T &&t);
-    bool _push(T &&t);
-    bool _try_push(T &&t);
+    struct Consumer_ {
+        // friend class std::deque<Consumer_ *>;
+        std::optional<T> t_;
+        std::condition_variable cv_;
+    };
+    void ntfclose_();
+    Consumer_ *popc_();
+    std::optional<T> popb_();
     bool closed_ = false;
     std::mutex wmtx_;
-    // std::mutex rmtx_;
-    // std::mutex umtx_;
     std::condition_variable wcv_;
-    std::condition_variable rcv_;
-    std::condition_variable ucv_;
-    // std::function<T && ()> ub_ = nullptr;
-    T *ub_ = nullptr;
-    inline constexpr T *_make_ub(T &&t);
-    inline T &&_deref_ub(T *ub);
-    // std::function<T && ()> ub_ = nullptr;
-    std::vector<std::optional<T>> v_;
-    size_t readpos_ = 0;
-    size_t writepos_ = 0;
+    std::deque<Consumer_ *> consumers_;
+    std::queue<T> buffer_;
+    size_t buffer_size_ = 0;
 };
 
 template <class T>
-Chan<T>::Chan(size_t size) {
-    v_ = std::vector<std::optional<T>>(size);
-}
+Chan<T>::Chan(size_t size) : buffer_size_(size) {}
 
 template <class T>
 Chan<T>::~Chan() {
@@ -121,7 +105,7 @@ bool Chan<T>::is_closed() {
 template <class T>
 bool Chan<T>::empty() {
     std::unique_lock<std::mutex> _(wmtx_);
-    return closed_ && ub_ == nullptr && l_.empty();
+    return closed_ && !ub_ && l_.empty();
 }
 
 template <class T>
@@ -132,239 +116,188 @@ Chan<T>::operator bool() {
 template <class T>
 void Chan<T>::close() {
     closed_ = true;
-    _ntfclose();
+    ntfclose_();
 }
 
 template <class T>
 bool Chan<T>::push(const T &t) {
-    return _push(std::move(T{t}));
-}
-template <class T>
-bool Chan<T>::push(T &&t) {
-    return _push(std::move(t));
-}
-
-template <class T>
-bool Chan<T>::_push_unbuffered(T &&t) {
-    std::unique_lock<std::mutex> wul{wmtx_};
-    wcv_.wait(wul, [this]() { return (closed_ || !ub_); });
+    std::unique_lock<std::mutex> ul(wmtx_);
+    wcv_.wait(ul, [this]() {
+        return closed_ || !consumers_.empty() || buffer_.size() < buffer_size_;
+    });
     if (closed_) {
-        wul.unlock();
-        _ntfclose();
+        ntfclose_();
         return false;
     }
-
-    {
-        // std::unique_lock<std::mutex> uul{wmtx_};
-        ub_ = _make_ub(std::move(t));
-        rcv_.notify_one();
-        // std::this_thread::yield();
-        ucv_.wait(wul, [this]() mutable {
-            return closed_ || !ub_;
-            // auto res = (closed_ || !ub_);
-            // if (!res && !ub_) {
-            //     //std::cout << "!ub_ ?" << (!ub_) << "\n";
-            // }
-            // return res;
-        });
-        rcv_.notify_one();
-        if (ub_) {
-            ub_ = nullptr;
-            // uul.unlock();
-            wul.unlock();
-            _ntfclose();
-            return false;
-        }
+    if (auto c = popc_(); c) {
+        c->t_.emplace(t);
+        c->cv_.notify_one();
+        return true;
     }
-
-    wul.unlock();
+    buffer_.emplace(t);
     wcv_.notify_one();
     return true;
 }
 
 template <class T>
-bool Chan<T>::_push(T &&t) {
-    if (v_.empty()) {
-        return _push_unbuffered(std::move(t));
-    }
-    std::unique_lock<std::mutex> ul{wmtx_};
-    wcv_.wait(ul, [this]() { return closed_ || !v_[writepos_]; });
+bool Chan<T>::push(T &&t) {
+    std::unique_lock<std::mutex> ul(wmtx_);
+    wcv_.wait(ul, [this]() {
+        return closed_ || !consumers_.empty() || buffer_.size() < buffer_size_;
+    });
     if (closed_) {
-        ul.unlock();
-        _ntfclose();
+        ntfclose_();
         return false;
     }
-    v_[writepos_].emplace(std::move(t));
-    writepos_ = (writepos_ + 1) % v_.size();
-    auto ntfw = !v_[writepos_];
-    ul.unlock();
-    rcv_.notify_one();
-    if (ntfw) {
+    if (auto c = popc_(); c) {
+        c->t_.emplace(std::move(t));
+        c->cv_.notify_one();
         wcv_.notify_one();
+        return true;
     }
+    buffer_.emplace(std::move(t));
+    wcv_.notify_one();
     return true;
 }
 
 template <class T>
 bool Chan<T>::try_push(const T &t) {
-    return _try_push(t);
+    std::unique_lock<std::mutex> ul(wmtx_, std::defer_lock);
+    if (!ul.try_lock())
+        return false;
+    if (closed_) {
+        ntfclose_();
+        return false;
+    }
+    if (auto c = popc_(); c) {
+        c->t_.set_value(t);
+        c->cv_.notify_one();
+        wcv_.notify_one();
+        return true;
+    }
+    if (buffer_.size() < buffer_size_) {
+        buffer_.push(t);
+        wcv_.notify_one();
+        return true;
+    }
+    wcv_.notify_one();
+    return false;
 }
 
 template <class T>
 bool Chan<T>::try_push(T &&t) {
-    return _try_push(std::move(t));
-}
-template <class T>
-bool Chan<T>::_try_push(T &&t) {
     std::unique_lock<std::mutex> ul(wmtx_, std::defer_lock);
-    if (!ul.try_lock()) {
+    if (!ul.try_lock())
         return false;
-    }
     if (closed_) {
-        ul.unlock();
-        _ntfclose();
+        ntfclose_();
         return false;
     }
-    if (v_.empty()) {
-        if (ub_)
-            return false;
-
-        ub_ = _make_ub(std::move(t));
-        rcv_.notify_one();
-        ucv_.wait(ul, [this]() { return (closed_ || !ub_); });
-        if (ub_) {
-            ub_ = nullptr;
-            ul.unlock();
-            _ntfclose();
-            return false;
-        }
-        ul.unlock();
+    if (auto c = popc_(); c) {
+        c->t_.set_value(std::move(t));
+        c->cv_.notify_one();
+        return true;
+    }
+    if (buffer_.size() < buffer_size_) {
+        buffer_.push(std::move(t));
         wcv_.notify_one();
         return true;
     }
-    if (v_[writepos_])
-        return false;
-    v_[writepos_].emplace(std::move(t));
-    writepos_ = (writepos_ + 1) % v_.size();
-    auto ntfw = !v_[writepos_];
-    ul.unlock();
-    rcv_.notify_one();
-    if (ntfw)
-        wcv_.notify_one();
-    return true;
+    return false;
 }
+
 template <class T>
 bool Chan<T>::operator<<(const T &t) {
-    return _push(t);
+    return push(t);
 }
 template <class T>
 bool Chan<T>::operator<<(T &&t) {
-    return _push(std::move(t));
+    return push(std::move(t));
 }
 
-template <class T>
-std::optional<T> Chan<T>::pop_unbuffered() {
-    ucv_.notify_one();
-    std::unique_lock<std::mutex> ul{wmtx_};
-    rcv_.wait(ul, [this]() mutable { return closed_ || ub_; });
-    // std::cout << "consumer wake up\n";
-    if (ub_) {
-        std::optional<T> ret{_deref_ub(ub_)};
-        // std::optional<T> ret{std::move(*ub_)};
-        ub_ = nullptr;
-        ul.unlock();
-        ucv_.notify_one();
-        return std::move(ret);
-    }
-    // std::cout << "closed ? " << closed_ << ", receiver ?"
-    //           << (ub_ != nullptr) << "\n";
-    ul.unlock();
-    _ntfclose();
-    return std::optional<T>{};
-}
 template <class T>
 std::optional<T> Chan<T>::pop() {
-    if (v_.empty()) {
-        return std::move(pop_unbuffered());
-    }
-    std::unique_lock<std::mutex> ul{wmtx_};
-    rcv_.wait(ul, [this]() { return closed_ || v_[readpos_]; });
-
-    if (v_[readpos_]) {
-        std::optional<T> ret;
-        swap(ret, std::move(v_[readpos_]));
-        readpos_ = (readpos_ + 1) % v_.size();
-        auto ntfr = v_[readpos_];
-        ul.unlock();
-        if (ntfr) {
-            rcv_.notify_one();
-        }
+    wcv_.notify_one();
+    std::unique_lock<std::mutex> ul(wmtx_);
+    if (!buffer_.empty()) {
         wcv_.notify_one();
-        return std::move(ret);
+        return popb_();
     }
-    ul.unlock();
-    _ntfclose();
-    return std::optional<T>{};
+    Consumer_ c;
+    consumers_.push_back(&c);
+    c.cv_.wait(ul, [this, &c]() { return closed_ || c.t_; });
+    if (c.t_) {
+        wcv_.notify_one();
+        return c.t_;
+    }
+    if (auto itr = std::find(consumers_.begin(), consumers_.end(), &c);
+        itr != consumers_.end()) {
+        consumers_.erase(itr);
+    }
+    ntfclose_();
+    return std::nullopt;
 }
 
 template <class T>
 std::optional<T> Chan<T>::try_pop() {
-    if (v_.empty()) {
-        std::unique_lock<std::mutex> ul{wmtx_, std::defer_lock};
-        if (!ul.try_lock)
-            return false;
-        ucv_.notify_one();
-        if (ub_) {
-            std::optional<T> ret{std::move(*ub_)};
-            receiver_called_ = true;
-            ul.unlock();
-            ucv_.notify_one();
-            return std::move(ret);
-        }
-        if (closed_) {
-            ul.unlock();
-            _ntfclose();
-            return std::optional<T>{};
-        }
-        return std::optional<T>{};
-    }
-    std::unique_lock<std::mutex> ul{wmtx_, std::defer_lock};
-    if (!ul.try_lock)
-        return false;
-    if (v_[readpos_]) {
-        std::optional<T> ret;
-        swap(ret, std::move(v_[readpos_]));
-        readpos_ = (readpos_ + 1) % v_.size();
-        auto ntfr = v_[readpos_];
-        ul.unlock();
-        if (ntfr) {
-            rcv_.notify_one();
-        }
-        wcv_.notify_one();
-        return std::move(ret);
-    }
-    if (closed_) {
-        ul.unlock();
-        _ntfclose();
-        return std::optional<T>{};
-    }
-    return std::optional<T>{};
-}
-
-template <class T>
-constexpr T *Chan<T>::_make_ub(T &&t) {
-    return &t;
-}
-template <class T>
-T &&Chan<T>::_deref_ub(T *ub) {
-    return std::move(*ub);
-}
-
-template <class T>
-void Chan<T>::_ntfclose() {
     wcv_.notify_one();
-    rcv_.notify_one();
-    ucv_.notify_one();
+    std::unique_lock<std::mutex> ul(wmtx_, std::defer_lock);
+    if (!ul.try_lock()) {
+        wcv_.notify_one();
+        return std::nullopt;
+    }
+    if (!buffer_.empty()) {
+        wcv_.notify_one();
+        return popb_();
+    }
+    Consumer_ c;
+    consumers_.push_back(&c);
+    ul.unlock();
+    wcv_.notify_one();
+    std::this_thread::yield();
+    ul.lock();
+    if (c.t_) {
+        wcv_.notify_one();
+        return c.t_;
+    }
+    if (auto itr = std::find(consumers_.begin(), consumers_.end(), &c);
+        itr != consumers_.end()) {
+        consumers_.erase(itr);
+    }
+    if (c.closed_) {
+        ntfclose_();
+    } else {
+        wcv_.notify_one();
+    }
+    return std::nullopt;
+}
+
+template <class T>
+void Chan<T>::ntfclose_() {
+    wcv_.notify_one();
+    for (auto c : consumers_) {
+        c->cv_.notify_one();
+        break;
+    }
+}
+
+template <class T>
+typename Chan<T>::Consumer_ *Chan<T>::popc_() {
+    typename Chan<T>::Consumer_ *res = nullptr;
+    if (!consumers_.empty()) {
+        res = consumers_.front();
+        consumers_.pop_front();
+    }
+    return res;
+}
+
+template <class T>
+std::optional<T> Chan<T>::popb_() {
+    if (buffer_.empty())
+        return std::nullopt;
+    std::optional<T> res{std::move(buffer_.front())};
+    buffer_.pop();
+    return res;
 }
 /* range expression */
 
@@ -381,9 +314,8 @@ void Chan<T>::Iterator::operator++() {}
 
 template <class T>
 T Chan<T>::Iterator::operator*() {
-    std::optional<T> tmp;
-    swap(tmp, tmp_);
-    return std::move(*tmp);
+    Defer _{[this]() { tmp_.reset(); }};
+    return std::move(*tmp_);
 }
 /* construct iterator */
 template <class T>
