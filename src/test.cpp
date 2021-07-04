@@ -13,7 +13,7 @@ std::chrono::steady_clock::duration fcount(std::function<void()> f) {
     return std::chrono::steady_clock::now() - t;
 }
 
-int main() {
+void test2() {
     Chan<void *> ch;
     auto num_threads = std::thread::hardware_concurrency();
     for (auto v : std::vector<bool>{true, false})
@@ -86,11 +86,9 @@ int main() {
                                   << " ms\n";
                     }
                 }
-
-    return 0;
 }
 
-int main1() {
+void test1() {
     WaitGroup wg{};
     int x = 0;
     std::mutex mtx;
@@ -106,5 +104,9 @@ int main1() {
             break;
         }
     });
+}
+
+int main() {
+    test2();
     return 0;
 }

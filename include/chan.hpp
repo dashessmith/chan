@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "defer.hpp"
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
@@ -11,8 +12,6 @@
 #include <queue>
 #include <unordered_set>
 #include <utility>
-
-#include "defer.hpp"
 
 namespace goxx {
 /*
