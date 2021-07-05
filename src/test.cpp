@@ -1,7 +1,9 @@
 #include "goxx.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <deque>
+#include <format>
 #include <iostream>
 #include <mutex>
 
@@ -106,7 +108,16 @@ void test1() {
     });
 }
 
+void test_mt_sort() {
+    std::vector<int> vec{0, 3, 1};
+    mt_sort(std::begin(vec), std::end(vec));
+    for (auto v : vec) {
+        std::cout << v << "\t";
+    }
+    std::cout << "\n";
+}
+
 int main() {
-    test2();
+    test_mt_sort();
     return 0;
 }
