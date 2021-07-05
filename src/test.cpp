@@ -3,19 +3,12 @@
 #include <chrono>
 #include <cstdio>
 #include <deque>
-#include <format>
 #include <iostream>
 #include <mutex>
 
 using namespace goxx;
 
-std::chrono::steady_clock::duration fcount(std::function<void()> f) {
-    auto t = std::chrono::steady_clock::now();
-    f();
-    return std::chrono::steady_clock::now() - t;
-}
-
-void test2() {
+void test_chan() {
     Chan<void *> ch;
     auto num_threads = std::thread::hardware_concurrency();
     for (auto v : std::vector<bool>{true, false})
@@ -23,7 +16,7 @@ void test2() {
             for (auto nth : std::vector<size_t>{num_threads})
                 for (auto csize : std::vector<size_t>{0, 1, 2, 3, 1024}) {
                     Chan<int> c{csize};
-                    auto d = fcount([&]() {
+                    auto d = elapse([&]() {
                         std::vector<int> collected;
                         std::mutex collected_mtx;
                         WaitGroup wg{};
@@ -109,12 +102,14 @@ void test1() {
 }
 
 void test_mt_sort() {
-    std::vector<int> vec{0, 3, 1};
-    mt_sort(std::begin(vec), std::end(vec));
-    for (auto v : vec) {
-        std::cout << v << "\t";
+    size_t N = 10000;
+    std::vector<size_t> vec(N);
+    for (size_t i = 0; i < N; i++) {
+        vec[i] = (size_t)std::rand() / N;
     }
-    std::cout << "\n";
+    auto d = elapse([&]() { mt_sort(std::begin(vec), std::end(vec)); });
+    assert(std::is_sorted(vec.begin(), vec.end()));
+    std::cout << " elapse " << (d / std::chrono::milliseconds(1)) << "ms\n";
 }
 
 int main() {

@@ -10,7 +10,7 @@ void mt_sort(Iterator first, Iterator last) {
 }
 
 template <class Iterator, class Compare>
-void mt_sort(Iterator first, Iterator last, Compare comp = std::less<>{}) {
+void mt_sort(Iterator first, Iterator last, Compare comp) {
     auto N = std::distance(first, last);
     if (N <= 1)
         return;
@@ -18,7 +18,7 @@ void mt_sort(Iterator first, Iterator last, Compare comp = std::less<>{}) {
     auto first_pivot = true;
 
     std::function<void(Iterator, Iterator)> impl = [&](auto left, auto right) {
-        if (left >= right) {
+        if (std::distance(left, right) <= 0) {
             return;
         }
         auto pivot = left;
@@ -29,17 +29,21 @@ void mt_sort(Iterator first, Iterator last, Compare comp = std::less<>{}) {
             std::advance(pivot, std::distance(left, right) / 2);
         }
         auto j = left;
-        swap(pivot, right);
+        std::swap(*pivot, *right);
         for (auto i = left; i != right; i++) {
             if (comp(*i, *right)) {
-                swap(i, j);
+                std::swap(*i, *j);
                 j++;
             }
         }
-        swap(j, right);
+        std::swap(*j, *right);
         pivot = j;
-        impl(left, pivot);
-        impl(pivot + 1, right);
+        if (std::distance(left, pivot) >= 1) {
+            impl(left, pivot);
+        }
+        if (std::distance(pivot + 1, right) >= 1) {
+            impl(pivot + 1, right);
+        }
     };
     impl(first, std::prev(last));
 }
