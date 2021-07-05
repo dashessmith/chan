@@ -100,6 +100,27 @@ void test1() {
         }
     });
 }
+void test_mt_sort_origin() {
+    size_t N = 100000000;
+    std::vector<size_t> vec(N);
+    for (size_t i = 0; i < N; i++) {
+        vec[i] = (size_t)std::rand() / N;
+    }
+    // vec = {1118, 314, 1634, 10, 998, 2102, 2345, 2332, 3186, 3225};
+    std::cout << "start\n";
+    auto d = elapse([&]() { std::sort(std::begin(vec), std::end(vec)); });
+    std::cout << " elapse " << (d / std::chrono::milliseconds(1)) << "ms\n";
+    if (!std::is_sorted(vec.begin(), vec.end())) {
+        std::cout << " test failed, not sorted\n";
+        for (auto v : vec) {
+            std::cout << v << " ";
+        }
+        std::cout << "\n";
+    } else {
+        // std::cout << " elapse " << (d / std::chrono::milliseconds(1)) <<
+        // "ms\n";
+    }
+}
 
 void test_mt_sort() {
     size_t N = 10000;
@@ -107,12 +128,24 @@ void test_mt_sort() {
     for (size_t i = 0; i < N; i++) {
         vec[i] = (size_t)std::rand() / N;
     }
+    // vec = {1118, 314, 1634, 10, 998, 2102, 2345, 2332, 3186, 3225};
+    std::cout << "start\n";
     auto d = elapse([&]() { mt_sort(std::begin(vec), std::end(vec)); });
-    assert(std::is_sorted(vec.begin(), vec.end()));
     std::cout << " elapse " << (d / std::chrono::milliseconds(1)) << "ms\n";
+    if (!std::is_sorted(vec.begin(), vec.end())) {
+        std::cout << " test failed, not sorted\n";
+        for (auto v : vec) {
+            std::cout << v << " ";
+        }
+        std::cout << "\n";
+    } else {
+        // std::cout << " elapse " << (d / std::chrono::milliseconds(1)) <<
+        // "ms\n";
+    }
 }
 
 int main() {
+    test_mt_sort_origin();
     test_mt_sort();
     return 0;
 }

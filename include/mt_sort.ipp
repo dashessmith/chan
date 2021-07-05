@@ -1,4 +1,6 @@
 #pragma once
+#include "chan.hpp"
+#include "wait_group.hpp"
 #include <cstdlib>
 #include <functional>
 #include <iterator>
@@ -17,16 +19,28 @@ void mt_sort(Iterator first, Iterator last, Compare comp) {
 
     auto first_pivot = true;
 
+    WaitGroup wg{};
+    // Chan<std::pair<Iterator, Iterator>>
+    // ch{std::thread::hardware_concurrency()};
+    auto thread_limit = (1 << 10);
+
     std::function<void(Iterator, Iterator)> impl = [&](auto left, auto right) {
-        if (std::distance(left, right) <= 0) {
+        auto d = std::distance(left, right);
+        if (d <= 0) {
+            return;
+        }
+        if (d == 1) {
+            if (comp(*right, *left)) {
+                std::swap(*left, *right);
+            }
             return;
         }
         auto pivot = left;
         if (first_pivot) {
             first_pivot = false;
-            std::advance(pivot, std::rand() % N);
+            std::advance(pivot, std::rand() % d);
         } else {
-            std::advance(pivot, std::distance(left, right) / 2);
+            std::advance(pivot, d / 2);
         }
         auto j = left;
         std::swap(*pivot, *right);
@@ -38,14 +52,43 @@ void mt_sort(Iterator first, Iterator last, Compare comp) {
         }
         std::swap(*j, *right);
         pivot = j;
-        if (std::distance(left, pivot) >= 1) {
-            impl(left, pivot);
+
+        auto left_d = std::distance(left, pivot);
+        auto right_d = std::distance(pivot + 1, right);
+        if (left_d > right_d) {
+            if (left_d > 0) {
+                if (left_d > thread_limit) {
+                    wg.go([impl, left, pivot]() { impl(left, pivot); });
+                } else {
+                    impl(left, pivot);
+                }
+            }
+            if (right_d > 0) {
+                impl(pivot + 1, right);
+            }
+        } else {
+            if (right_d > 0) {
+                if (right_d > thread_limit) {
+                    wg.go([impl, pivot, right]() { impl(pivot + 1, right); });
+                } else {
+                    impl(pivot + 1, right);
+                }
+            }
+            if (left_d > 0) {
+                impl(left, pivot);
+            }
         }
-        if (std::distance(pivot + 1, right) >= 1) {
-            impl(pivot + 1, right);
-        }
+        // if (std::distance(left, pivot) > 0) {
+        //     wg.go([impl, left, pivot]() { impl(left, pivot); });
+        //     // impl(left, pivot);
+        // }
+        // if (std::distance(pivot + 1, right) > 0) {
+        //     wg.go([impl, pivot, right]() { impl(pivot + 1, right); });
+        //     // impl(pivot + 1, right);
+        // }
     };
     impl(first, std::prev(last));
+    wg.wait();
 }
 
 } // namespace goxx
