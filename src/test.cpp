@@ -6,19 +6,21 @@
 #include <iostream>
 #include <mutex>
 
+using namespace std;
+
 using namespace goxx;
 
 void test_chan() {
     Chan<void *> ch;
-    auto num_threads = std::thread::hardware_concurrency();
-    for (auto v : std::vector<bool>{true, false})
-        for (auto count : std::vector<int>{1000000})
-            for (auto nth : std::vector<size_t>{num_threads})
-                for (auto csize : std::vector<size_t>{0, 1, 2, 3, 1024}) {
+    auto num_threads = thread::hardware_concurrency();
+    for (auto v : {true, false})
+        for (auto count : {1000000})
+            for (auto nth : {num_threads})
+                for (size_t csize : {0, 1, 2, 3, 1024}) {
                     Chan<int> c{csize};
                     auto d = elapse([&]() {
-                        std::vector<int> collected;
-                        std::mutex collected_mtx;
+                        vector<int> collected;
+                        mutex collected_mtx;
                         WaitGroup wg{};
                         if (nth <= 1) {
                             wg.go([&c, &count]() {
@@ -36,7 +38,7 @@ void test_chan() {
                                             collected_mtx.unlock();
                                         }
                                     }
-                                    std::cout << " consumer quit\n";
+                                    cout << " consumer quit\n";
                                 });
 
                         } else {
@@ -61,91 +63,101 @@ void test_chan() {
                                 nullptr, nth);
                         }
                         wg.wait();
-                        std::cout << "wait group quit\n";
+                        cout << "wait group quit\n";
                         if (v) {
                             sort(collected.begin(), collected.end());
                             for (auto i = 0; i < count; i++) {
                                 if (collected[i] != i) {
-                                    std::cout << "collected[i] != i, "
-                                              << collected[i] << " != " << i
-                                              << "\n";
-                                    throw std::runtime_error("assert failed");
+                                    cout << "collected[i] != i, "
+                                         << collected[i] << " != " << i << "\n";
+                                    throw runtime_error("assert failed");
                                 }
                             }
                         }
                     });
                     if (!v) {
-                        std::cout << "threads " << nth << ", count " << count
-                                  << ", chan size  " << csize << ", elapse "
-                                  << d / std::chrono::milliseconds(1)
-                                  << " ms\n";
+                        cout << "threads " << nth << ", count " << count
+                             << ", chan size  " << csize << ", elapse "
+                             << d / chrono::milliseconds(1) << " ms\n";
                     }
                 }
 }
 
-void test1() {
+void test_wg() {
     WaitGroup wg{};
     int x = 0;
-    std::mutex mtx;
-    // std::condition_variable cv;
+    mutex mtx;
+    // condition_variable cv;
     wg.together([&](size_t idx, size_t) {
         for (;;) {
-            std::unique_lock<std::mutex> ul(mtx);
+            unique_lock<mutex> ul(mtx);
             if (x != idx) {
                 continue;
             }
             x++;
-            std::cout << " index " << idx << " quit\n";
+            cout << " index " << idx << " quit\n";
             break;
         }
     });
 }
 void test_mt_sort_origin() {
     size_t N = 100000000;
-    std::vector<size_t> vec(N);
+    vector<size_t> vec(N);
     for (size_t i = 0; i < N; i++) {
-        vec[i] = (size_t)std::rand() / N;
+        vec[i] = (size_t)rand() / N;
     }
     // vec = {1118, 314, 1634, 10, 998, 2102, 2345, 2332, 3186, 3225};
-    std::cout << "start\n";
-    auto d = elapse([&]() { std::sort(std::begin(vec), std::end(vec)); });
-    std::cout << " elapse " << (d / std::chrono::milliseconds(1)) << "ms\n";
-    if (!std::is_sorted(vec.begin(), vec.end())) {
-        std::cout << " test failed, not sorted\n";
+    cout << "start\n";
+    auto d = elapse([&]() { sort(begin(vec), end(vec)); });
+    cout << " elapse " << (d / chrono::milliseconds(1)) << "ms\n";
+    if (!is_sorted(vec.begin(), vec.end())) {
+        cout << " test failed, not sorted\n";
         for (auto v : vec) {
-            std::cout << v << " ";
+            cout << v << " ";
         }
-        std::cout << "\n";
+        cout << "\n";
     } else {
-        // std::cout << " elapse " << (d / std::chrono::milliseconds(1)) <<
+        // cout << " elapse " << (d / chrono::milliseconds(1)) <<
         // "ms\n";
     }
 }
 
 void test_mt_sort() {
     size_t N = 10000;
-    std::vector<size_t> vec(N);
+    vector<size_t> vec(N);
     for (size_t i = 0; i < N; i++) {
-        vec[i] = (size_t)std::rand() / N;
+        vec[i] = (size_t)rand() / N;
     }
     // vec = {1118, 314, 1634, 10, 998, 2102, 2345, 2332, 3186, 3225};
-    std::cout << "start\n";
-    auto d = elapse([&]() { mt_sort(std::begin(vec), std::end(vec)); });
-    std::cout << " elapse " << (d / std::chrono::milliseconds(1)) << "ms\n";
-    if (!std::is_sorted(vec.begin(), vec.end())) {
-        std::cout << " test failed, not sorted\n";
+    cout << "start\n";
+    auto d = elapse([&]() { mt_sort(begin(vec), end(vec)); });
+    cout << " elapse " << (d / chrono::milliseconds(1)) << "ms\n";
+    if (!is_sorted(vec.begin(), vec.end())) {
+        cout << " test failed, not sorted\n";
         for (auto v : vec) {
-            std::cout << v << " ";
+            cout << v << " ";
         }
-        std::cout << "\n";
+        cout << "\n";
     } else {
-        // std::cout << " elapse " << (d / std::chrono::milliseconds(1)) <<
+        // cout << " elapse " << (d / chrono::milliseconds(1)) <<
         // "ms\n";
     }
 }
 
+void test_priority_queue() {
+    priority_queue<int> q;
+    for (int i = 0; i < 10; i++)
+        q.push(10 - i);
+    for (; !q.empty();) {
+        auto n = q.top();
+        q.pop();
+        cout << "n = " << n << "\n";
+    }
+}
+
 int main() {
-    test_mt_sort_origin();
-    test_mt_sort();
+    // test_mt_sort_origin();
+    // test_mt_sort();
+    test_priority_queue();
     return 0;
 }
