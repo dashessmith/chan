@@ -104,7 +104,7 @@ bool Chan<T>::is_closed() {
 template <class T>
 bool Chan<T>::empty() {
     std::unique_lock<std::mutex> _(wmtx_);
-    return closed_ && !ub_ && l_.empty();
+    return closed_ && buffer_.empty();
 }
 
 template <class T>
@@ -315,7 +315,7 @@ void Chan<T>::Iterator::operator++() {
 
 template <class T>
 T Chan<T>::Iterator::operator*() {
-    Defer _{[this]() { tmp_.reset(); }};
+    goxx_defer([this]() { tmp_.reset(); });
     return std::move(*tmp_);
 }
 /* construct iterator */

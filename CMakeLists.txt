@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(chan_test)
+project(goxx_test)
 set(CMAKE_CXX_STANDARD 17)
 include_directories(include)
-add_executable(chan_test src/test.cpp)
+add_executable(goxx_test src/test.cpp)
