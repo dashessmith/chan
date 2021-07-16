@@ -9,10 +9,6 @@ namespace goxx {
         return 0;                                                              \
     }();
 
-goxx_init([]() { std::srand((unsigned int)std::time(0)); });
-
-// inline static int _ = [&]() {
-//     [&]() { std::srand((unsigned int)std::time(0)); }();
-//     return 0;
-// }();
 } // namespace goxx
+
+#include "init.ipp"
