@@ -1,14 +1,12 @@
 #pragma once
 #include "annoymous.hpp"
-#include <cstdlib>
-#include <ctime>
+#include <functional>
 namespace goxx {
-#define goxx_init(f)                                                           \
-    inline static int _ = [&]() {                                              \
-        f();                                                                   \
-        return 0;                                                              \
-    }();
-
+#define goxx_init(f) inline static Init goxx_{f};
+class Init {
+  public:
+    Init(std::function<void()> &&f);
+};
 } // namespace goxx
 
 #include "init.ipp"
