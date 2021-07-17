@@ -158,6 +158,6 @@ void test_priority_queue() {
 int main() {
     // test_mt_sort_origin();
     // test_mt_sort();
-    test_priority_queue();
+    // test_priority_queue();
     return 0;
 }

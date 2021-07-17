@@ -2,6 +2,7 @@
 #pragma once
 
 #include "chan.hpp"
+#include <thread>
 
 namespace goxx {
 
