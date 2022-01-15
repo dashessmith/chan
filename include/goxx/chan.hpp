@@ -33,7 +33,7 @@ class Chan {
 
     void close();     // set closed_
     bool is_closed(); // check closed_
-    bool empty();     // check l_.empty && closed_
+    bool exhausted();     // check l_.empty && closed_
     operator bool();  // check !(l_.empty && closed_)
 
     bool push(const T &t);
@@ -67,11 +67,15 @@ class Chan {
     Iterator end();
 
   private:
+    size_t next_idx(size_t idx) const;
+    bool buffer_empty() const;
     bool closed_ = false;
     std::optional<T> popt();
     std::mutex mtx_;
     std::condition_variable cv_;
-    std::queue<T> buffer_;
+    std::vector<std::optional<T>> buffer_;
+    size_t ridx_ = 0;
+    size_t widx_ = 0;
     size_t buffer_size_ = 0;
 };
 
