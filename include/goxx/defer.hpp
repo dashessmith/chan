@@ -7,8 +7,8 @@ namespace goxx {
 #define goxx_defer(f) Defer goxx_{f};
 class Defer {
   public:
-    inline Defer(std::function<void()> f);
-    inline ~Defer();
+    Defer(std::function<void()> f);
+    ~Defer();
 
   private:
     std::function<void()> f_;

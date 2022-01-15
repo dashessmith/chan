@@ -3,7 +3,7 @@
 
 namespace goxx {
 
-inline Defer::Defer(std::function<void()> f) : f_{f} {}
-inline Defer::~Defer() { f_(); }
+Defer::Defer(std::function<void()> f) : f_{f} {}
+Defer::~Defer() { f_(); }
 
 } // namespace goxx

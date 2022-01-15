@@ -13,10 +13,10 @@ using namespace goxx;
 void test_chan() {
     Chan<void *> ch;
     auto num_threads = thread::hardware_concurrency();
-    for (auto v : {true, false})
+    for (auto verbose : {false})
         for (auto count : {1000000})
             for (auto nth : {num_threads})
-                for (size_t csize : {0, 1, 2, 3, 1024}) {
+                for (size_t csize : {0, 1, 2, 4, 8, 16, 1024}) {
                     Chan<int> c{csize};
                     auto d = elapse([&]() {
                         vector<int> collected;
@@ -29,17 +29,17 @@ void test_chan() {
                                 }
                                 c.close();
                             });
-                            wg.go(
-                                [&c, &v, &collected, &collected_mtx, &count]() {
-                                    for (auto n : c) {
-                                        if (v) {
-                                            collected_mtx.lock();
-                                            collected.emplace_back(n);
-                                            collected_mtx.unlock();
-                                        }
+                            wg.go([&c, &verbose, &collected, &collected_mtx,
+                                   &count]() {
+                                for (auto n : c) {
+                                    if (verbose) {
+                                        collected_mtx.lock();
+                                        collected.emplace_back(n);
+                                        collected_mtx.unlock();
                                     }
-                                    cout << " consumer quit\n";
-                                });
+                                }
+                                cout << " consumer quit\n";
+                            });
 
                         } else {
                             wg.together(
@@ -50,10 +50,10 @@ void test_chan() {
                                 },
                                 [&c]() { c.close(); }, nth);
                             wg.together(
-                                [&c, &v, &collected, &collected_mtx](size_t,
-                                                                     size_t) {
+                                [&c, &verbose, &collected,
+                                 &collected_mtx](size_t, size_t) {
                                     for (auto n : c) {
-                                        if (v) {
+                                        if (verbose) {
                                             collected_mtx.lock();
                                             collected.emplace_back(n);
                                             collected_mtx.unlock();
@@ -64,7 +64,7 @@ void test_chan() {
                         }
                         wg.wait();
                         cout << "wait group quit\n";
-                        if (v) {
+                        if (verbose) {
                             sort(collected.begin(), collected.end());
                             for (auto i = 0; i < count; i++) {
                                 if (collected[i] != i) {
@@ -75,7 +75,7 @@ void test_chan() {
                             }
                         }
                     });
-                    if (!v) {
+                    if (!verbose) {
                         cout << "threads " << nth << ", count " << count
                              << ", chan size  " << csize << ", elapse "
                              << d / chrono::milliseconds(1) << " ms\n";
@@ -175,10 +175,10 @@ void test_get() {
 }
 
 int main() {
-
+    test_chan();
     // test_mt_sort_origin();
     // test_mt_sort();
     // test_priority_queue();
-    test_get();
+    // test_get();
     return 0;
 }

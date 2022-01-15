@@ -27,63 +27,50 @@ class Chan {
 
      **************************************/
     // if size == 0 , it becomes synchronous unbuffered channel
-    inline Chan(size_t size = 0);
+    Chan(size_t size = 0);
 
-    inline ~Chan(); // calls close
+    ~Chan(); // calls close
 
-    inline void close();     // set closed_
-    inline bool is_closed(); // check closed_
-    inline bool empty();     // check l_.empty && closed_
-    inline operator bool();  // check !(l_.empty && closed_)
+    void close();     // set closed_
+    bool is_closed(); // check closed_
+    bool empty();     // check l_.empty && closed_
+    operator bool();  // check !(l_.empty && closed_)
 
-    inline bool push(const T &t);
-    inline bool push(T &&t);
+    bool push(const T &t);
+    bool push(T &&t);
 
-    inline bool operator<<(const T &t);
-    inline bool operator<<(T &&t);
+    bool try_push(const T &t);
+    bool try_push(T &&t);
 
-    inline bool try_push(const T &t);
-    inline bool try_push(T &&t);
-
-    inline std::optional<T> pop();
-    inline std::optional<T> try_pop();
+    std::optional<T> pop();
+    std::optional<T> try_pop();
 
     /***************************************
          range expression
-          for (auto x : ch) {
-
-                  }
+          for (auto x : ch) { }
      ********************************/
 
     class Iterator {
         friend class Chan;
 
       public:
-        inline bool operator!=(const Iterator &end) const;
-        inline void operator++();
-        inline T operator*();
+        bool operator!=(const Iterator &end) const;
+        void operator++();
+        T operator*();
 
       private:
-        inline Iterator(Chan<T> &);
+        Iterator(Chan<T> &);
         Chan<T> &c_;
         std::optional<T> tmp_;
     };
-    inline Iterator begin();
-    inline Iterator end();
+    Iterator begin();
+    Iterator end();
 
   private:
-    struct Consumer_ {
-        // friend class std::deque<Consumer_ *>;
-        std::optional<T> t_;
-        std::condition_variable cv_;
-    };
-    inline void ntfclose_();
-    inline Consumer_ *popc_();
-    inline std::optional<T> popb_();
     bool closed_ = false;
-    std::mutex wmtx_;
-    std::condition_variable wcv_;
-    std::deque<Consumer_ *> consumers_;
+    std::optional<T> popt();
+    std::mutex mtx_;
+    std::condition_variable cv_;
     std::queue<T> buffer_;
     size_t buffer_size_ = 0;
 };
