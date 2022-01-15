@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "defer.hpp"
+#include "goxx/defer.hpp"
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
@@ -90,4 +90,4 @@ class Chan {
 
 } // namespace goxx
 
-#include "chan.ipp"
+#include "goxx/chan.ipp"

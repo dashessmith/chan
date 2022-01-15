@@ -35,4 +35,4 @@ class WaitGroup {
 
 } // namespace goxx
 
-#include "wait_group.ipp"
+#include "goxx/wait_group.ipp"

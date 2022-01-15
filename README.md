@@ -3,7 +3,7 @@ go style c++17 Chan\
 go style c++17 WaitGroup 
 
 ```c++
-#include "goxx.hpp"
+#include "goxx/goxx.hpp"
 #include <chrono>
 #include <cstdio>
 #include <deque>

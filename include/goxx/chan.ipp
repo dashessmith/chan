@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "chan.hpp"
+#include "goxx/chan.hpp"
 #include <thread>
 
 namespace goxx {

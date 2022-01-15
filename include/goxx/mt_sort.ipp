@@ -1,6 +1,6 @@
 #pragma once
-#include "chan.hpp"
-#include "wait_group.hpp"
+#include "goxx/chan.hpp"
+#include "goxx/wait_group.hpp"
 #include <cstdlib>
 #include <functional>
 #include <iterator>

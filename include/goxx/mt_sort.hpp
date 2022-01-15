@@ -8,4 +8,4 @@ template <class Iterator>
 void mt_sort(Iterator first, Iterator last);
 } // namespace goxx
 
-#include "mt_sort.ipp"
+#include "goxx/mt_sort.ipp"

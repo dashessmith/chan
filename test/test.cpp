@@ -1,4 +1,4 @@
-#include "goxx.hpp"
+#include "goxx/goxx.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -155,9 +155,27 @@ void test_priority_queue() {
     }
 }
 
+void test_get() {
+    class Shouter {
+      public:
+        Shouter() { cout << "im here\n"; }
+        ~Shouter() { cout << "i am gone!!\n"; }
+    };
+    auto x = goxx::get<Shouter>({.tag = "123"});
+    x = goxx::get<Shouter>({.tag = "123", .permanent = true});
+    x = goxx::get<Shouter>({.tag = "123", .permanent = true});
+    x = goxx::get<Shouter>({.tag = "123", .permanent = true});
+    x = goxx::get<Shouter>({.tag = "123"});
+    x = goxx::get<Shouter>({.permanent = true});
+    x = goxx::get<Shouter>({.tag = "123"});
+    x = goxx::get<Shouter>({.tag = "123456"});
+}
+
 int main() {
+
     // test_mt_sort_origin();
     // test_mt_sort();
     // test_priority_queue();
+    test_get();
     return 0;
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "wait_group.hpp"
+#include "goxx/wait_group.hpp"
 
 namespace goxx {
 

@@ -1,5 +1,5 @@
 #pragma once
-#include "annoymous.hpp"
+#include "goxx/annoymous.hpp"
 #include <functional>
 namespace goxx {
 #define goxx_init(f) inline static Init goxx_{f};
@@ -9,4 +9,4 @@ class Init {
 };
 } // namespace goxx
 
-#include "init.ipp"
+#include "goxx/init.ipp"

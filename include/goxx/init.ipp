@@ -1,5 +1,5 @@
 #pragma once
-#include "init.hpp"
+#include "goxx/init.hpp"
 #include <ctime>
 namespace goxx {
 

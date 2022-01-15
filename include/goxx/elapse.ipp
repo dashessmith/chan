@@ -1,5 +1,5 @@
 #pragma once
-#include "elapse.hpp"
+#include "goxx/elapse.hpp"
 
 namespace goxx {
 std::chrono::steady_clock::duration elapse(std::function<void()> f) {
