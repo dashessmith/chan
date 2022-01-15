@@ -160,15 +160,18 @@ void test_get() {
       public:
         Shouter() { cout << "im here\n"; }
         ~Shouter() { cout << "i am gone!!\n"; }
+        void foo() {}
     };
-    auto x = goxx::get<Shouter>({.tag = "123"});
-    x = goxx::get<Shouter>({.tag = "123", .permanent = true});
-    x = goxx::get<Shouter>({.tag = "123", .permanent = true});
-    x = goxx::get<Shouter>({.tag = "123", .permanent = true});
-    x = goxx::get<Shouter>({.tag = "123"});
-    x = goxx::get<Shouter>({.permanent = true});
-    x = goxx::get<Shouter>({.tag = "123"});
-    x = goxx::get<Shouter>({.tag = "123456"});
+    auto x = goxx::get<vector<Shouter>>({.tag = "123"});
+    x->emplace_back();
+    x = goxx::get<vector<Shouter>>({.tag = "123", .permanent = true});
+    x = goxx::get<vector<Shouter>>({.tag = "123", .permanent = true});
+    x = goxx::get<vector<Shouter>>({.tag = "123", .permanent = true});
+    x->at(0).foo();
+    x = goxx::get<vector<Shouter>>({.tag = "123"});
+    x = goxx::get<vector<Shouter>>({.permanent = true});
+    x = goxx::get<vector<Shouter>>({.tag = "123"});
+    x = goxx::get<vector<Shouter>>({.tag = "123456"});
 }
 
 int main() {

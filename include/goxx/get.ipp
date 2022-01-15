@@ -9,14 +9,12 @@ namespace goxx {
 namespace internal {
 
 template <class Dependency>
-auto get(std::function<std::shared_ptr<std::decay_t<Dependency>>()> &&creator,
-         const GetOption &option) -> std::shared_ptr<std::decay_t<Dependency>> {
+auto get(std::function<std::shared_ptr<Dependency>()> &&creator,
+         const GetOption &option) -> std::shared_ptr<Dependency> {
 
-    using Returntype = std::decay_t<Dependency>;
-
-    static std::unordered_map<std::string, std::weak_ptr<Returntype>>
+    static std::unordered_map<std::string, std::weak_ptr<Dependency>>
         referrences;
-    static std::unordered_map<std::string, std::shared_ptr<Returntype>>
+    static std::unordered_map<std::string, std::shared_ptr<Dependency>>
         permanent_referrences;
     static std::shared_mutex mtx;
 
@@ -38,7 +36,7 @@ auto get(std::function<std::shared_ptr<std::decay_t<Dependency>>()> &&creator,
         }
     }
 
-    std::shared_ptr<Returntype> sptr;
+    std::shared_ptr<Dependency> sptr;
 
     auto ul = std::unique_lock{mtx};
 
@@ -71,20 +69,20 @@ auto get(std::function<std::shared_ptr<std::decay_t<Dependency>>()> &&creator,
 }
 } // namespace internal
 
-template <class Dependency, class Creator>
+template <class Dependency, class Creator, class Storagetype>
 auto get(Creator &&creator, const GetOption &option)
-    -> std::shared_ptr<std::decay_t<Dependency>> {
-    return internal::get<Dependency>(
-        [&creator]() -> std::shared_ptr<Dependency> {
-            return std::shared_ptr<std::decay_t<Dependency>>{creator()};
+    -> std::shared_ptr<Storagetype> {
+    return internal::get<Storagetype>(
+        [&creator]() -> std::shared_ptr<Storagetype> {
+            return std::shared_ptr<Storagetype>{creator()};
         },
         option);
 }
 
-template <class Dependency>
-auto get(const GetOption &option) -> std::shared_ptr<std::decay_t<Dependency>> {
-    return internal::get<Dependency>(
-        []() { return make_shared<std::decay_t<Dependency>>(); }, option);
+template <class Dependency, class Storagetype>
+auto get(const GetOption &option) -> std::shared_ptr<Storagetype> {
+    return internal::get<Storagetype>(
+        []() { return make_shared<Storagetype>(); }, option);
 }
 
 } // namespace goxx

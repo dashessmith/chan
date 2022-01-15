@@ -7,13 +7,13 @@ struct GetOption {
     bool permanent = false;
 };
 
-template <class Dependency, class Creator>
+template <class Dependency, class Creator,
+          class Storagetype = Dependency>
 auto get(Creator &&creator, const GetOption &option = GetOption{})
-    -> std::shared_ptr<std::decay_t<Dependency>>;
+    -> std::shared_ptr<Storagetype>;
 
-template <class Dependency>
-auto get(const GetOption &option = GetOption{})
-    -> std::shared_ptr<std::decay_t<Dependency>>;
+template <class Dependency, class Storagetype = Dependency>
+auto get(const GetOption &option = GetOption{}) -> std::shared_ptr<Storagetype>;
 
 } // namespace goxx
 #include "goxx/get.ipp"
