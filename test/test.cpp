@@ -73,6 +73,9 @@ void test_chan() {
                                     throw runtime_error("assert failed");
                                 }
                             }
+                            if (collected.size() != count) {
+                                throw runtime_error("not all collected");
+                            }
                         }
                     });
                     if (!verbose) {
