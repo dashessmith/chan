@@ -4,21 +4,26 @@
 #include <chrono>
 #include <cstdio>
 #include <deque>
+#include <fmt/core.h>
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <iostream>
 #include <map>
 #include <mutex>
+#include <variant>
 
 using namespace std;
 
 using namespace goxx;
 
 void test_chan() {
-    Chan<void *> ch;
     auto num_threads = thread::hardware_concurrency();
-    for (auto verbose : {true, false})
+    for (auto verbose : {false})
         for (auto count : {1000000})
             for (auto nth : {num_threads})
-                for (size_t csize : {0, 1, 2, 4, 8, 16, 1024}) {
+                for (size_t csize :
+                     {1024, 512, 128, 64, 32, 16, 8, 4, 2, 1,
+                      0} /* {0, 1, 2, 4, 8, 16, 32, 64, 128, 512, 1024} */) {
                     Chan<int> c{csize};
                     auto d = elapse([&]() {
                         vector<int> collected;
@@ -27,7 +32,7 @@ void test_chan() {
                         if (nth <= 1) {
                             wg.go([&c, &count]() {
                                 for (auto i = 0; i < count; i++) {
-                                    c.push(i);
+                                    c.push(std::move(decltype(i){i}));
                                 }
                                 c.close();
                             });
@@ -40,7 +45,7 @@ void test_chan() {
                                         collected_mtx.unlock();
                                     }
                                 }
-                                cout << " consumer quit\n";
+                                fmt::print("consumer quit\n");
                             });
 
                         } else {
@@ -65,25 +70,36 @@ void test_chan() {
                                 nullptr, nth);
                         }
                         wg.wait();
-                        cout << "wait group quit\n";
+                        fmt::print("wait group quit\n");
                         if (verbose) {
                             sort(collected.begin(), collected.end());
                             for (auto i = 0; i < count; i++) {
+
                                 if (collected[i] != i) {
-                                    cout << "collected[i] != i, "
-                                         << collected[i] << " != " << i << "\n";
-                                    throw runtime_error("assert failed");
+                                    vector<int> subvec{
+                                        collected.begin() + i - 1,
+                                        collected.begin() +
+                                            std::min(size_t(i - 1 + 20),
+                                                     collected.size())};
+                                    fmt::print(
+                                        "i={},collected[i] != i, {} != {}, "
+                                        "csize={} {}\n",
+                                        i, collected[i], i, csize, subvec);
+                                    break;
+                                    // throw runtime_error("assert failed");
                                 }
                             }
                             if (collected.size() != count) {
-                                throw runtime_error("not all collected");
+                                fmt::print("size err {} != {}\n",
+                                           collected.size(), count);
+                                // throw runtime_error("not all collected");
                             }
                         }
                     });
                     if (!verbose) {
-                        cout << "threads " << nth << ", count " << count
-                             << ", chan size  " << csize << ", elapse "
-                             << d / chrono::milliseconds(1) << " ms\n";
+                        fmt::print("threads {}, count {}, chan size {}, elapse "
+                                   "{} ms\n",
+                                   nth, count, csize, d / 1ms);
                     }
                 }
 }
@@ -100,7 +116,7 @@ void test_wg() {
                 continue;
             }
             x++;
-            cout << " index " << idx << " quit\n";
+            fmt::print("index {} quit\n", idx);
             break;
         }
     });
@@ -112,15 +128,15 @@ void test_mt_sort_origin() {
         vec[i] = (size_t)rand() / N;
     }
     // vec = {1118, 314, 1634, 10, 998, 2102, 2345, 2332, 3186, 3225};
-    cout << "start\n";
+    fmt::print("start\n");
     auto d = elapse([&]() { sort(begin(vec), end(vec)); });
-    cout << " elapse " << (d / chrono::milliseconds(1)) << "ms\n";
+    fmt::print(" elapse {} ms\n", d / 1ms);
     if (!is_sorted(vec.begin(), vec.end())) {
-        cout << " test failed, not sorted\n";
+        fmt::print(" test failed, not sorted");
         for (auto v : vec) {
-            cout << v << " ";
+            fmt::print("v {}", v);
         }
-        cout << "\n";
+        fmt::print("\n");
     } else {
         // cout << " elapse " << (d / chrono::milliseconds(1)) <<
         // "ms\n";
@@ -159,24 +175,61 @@ void test_priority_queue() {
         cout << "n = " << n << "\n";
     }
 }
+class Shouter {
+  public:
+    Shouter() { fmt::print("im here\n"); }
+    Shouter(const Shouter &other) { fmt::print("im here copied\n"); }
+    Shouter(Shouter &&other) {
+        fmt::print("im here by rvalue\n");
+        other.has_data_ = false;
+    }
+    Shouter &operator=(const Shouter &other) {
+        fmt::print("im assigned copied\n");
+        return *this;
+    }
+    Shouter &operator=(Shouter &&other) {
+        fmt::print("im assigned copied by rvalue\n");
+        other.has_data_ = false;
+        return *this;
+    }
+    ~Shouter() {
+        if (has_data_) {
+            fmt::print("i am gone with data!!\n");
+        } else {
+            fmt::print("i am gone\n");
+        }
+    }
+    void foo() {}
+
+  private:
+    bool has_data_ = true;
+};
+
+template <>
+struct fmt::formatter<Shouter> {
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(Shouter const &shouter, FormatContext &ctx) {
+        return fmt::format_to(ctx.out(), "shouter ~~");
+    }
+};
 
 void test_get() {
-    class Shouter {
-      public:
-        Shouter() { cout << "im here\n"; }
-        ~Shouter() { cout << "i am gone!!\n"; }
-        void foo() {}
-    };
-    auto x = goxx::get<vector<Shouter>>({.tag = "123"});
+
+    auto x = goxx::get<vector<Shouter>>({"123"});
     x->emplace_back();
-    x = goxx::get<vector<Shouter>>({.tag = "123", .permanent = true});
-    x = goxx::get<vector<Shouter>>({.tag = "123", .permanent = true});
-    x = goxx::get<vector<Shouter>>({.tag = "123", .permanent = true});
+    x = goxx::get<vector<Shouter>>({"123", true});
+    x = goxx::get<vector<Shouter>>({"123", true});
+    x = goxx::get<vector<Shouter>>({"123", true});
     x->at(0).foo();
-    x = goxx::get<vector<Shouter>>({.tag = "123"});
-    x = goxx::get<vector<Shouter>>({.permanent = true});
-    x = goxx::get<vector<Shouter>>({.tag = "123"});
-    x = goxx::get<vector<Shouter>>({.tag = "123456"});
+    x = goxx::get<vector<Shouter>>({"123"});
+    x = goxx::get<vector<Shouter>>({"", true});
+    x = goxx::get<vector<Shouter>>({"123"});
+    x = goxx::get<vector<Shouter>>({"123456"});
 }
 
 void test_any() {
@@ -210,7 +263,6 @@ void test_any() {
     });
 
     wg->go([&]() {
-        this_thread::sleep_for(3s);
         for (auto x : *ch) {
             if (x.type() == typeid(int)) {
                 cout << "x=" << any_cast<int>(x) << "\n";
@@ -223,12 +275,68 @@ void test_any() {
     });
 }
 
+void test_variant() {
+    auto ch = make_shared<
+        Chan<variant<int, vector<int>, map<string, string>, string, Shouter>>>(
+        1024);
+    auto wg = make_shared<WaitGroup>();
+    goxx_defer([&]() { wg->wait(); });
+    wg->go([&]() {
+        for (auto i = 0; i < 10; i++) {
+            switch (i) {
+            case 1:
+                ch->push(vector<int>{1, 2, 3});
+                break;
+            case 2:
+                ch->push(map<string, string>{{"123", "456"}});
+                break;
+            case 3:
+                ch->push("123fdsa");
+                break;
+            case 4:
+                ch->push("jfidjfidss"s);
+                break;
+            default:
+                ch->push(i);
+                break;
+            }
+        }
+        ch->close();
+    });
+
+    wg->go([&]() {
+        for (auto v : *ch) {
+            visit(
+                cases{
+                    // [](const map<string, string> &arg) { fmt::print("map\n"); },
+                    // [](const vector<int> &arg) { fmt::print("vec\n"); },
+                    // [](const string &arg) { fmt::print("str {}\n", arg); },
+                    [](const auto &arg) { fmt::print("what {}\n", arg); },
+                },
+                v);
+        }
+    });
+}
+
+void test_optional() {
+    auto opt1 = optional<int>{1};
+    auto opt2 = optional<int>{};
+    fmt::print("opt1/opt2 has value ? {}/{}\n", opt1.has_value(),
+               opt2.has_value());
+
+    opt2.swap(opt1);
+    // opt1.reset();
+    fmt::print("opt1/opt2 has value ? {}/{}\n", opt1.has_value(),
+               opt2.has_value());
+}
 int main() {
+    // test_optional();
     // test_chan();
-    //  test_mt_sort_origin();
-    //  test_mt_sort();
-    //  test_priority_queue();
-    //  test_get();
-    test_any();
+    //    test_mt_sort_origin();
+    //    test_mt_sort();
+    //    test_priority_queue();
+    //    test_get();
+    //   test_any();
+    test_variant();
     return 0;
 }

@@ -27,21 +27,17 @@ class Chan {
 
      **************************************/
     // if size == 0 , it becomes synchronous unbuffered channel
-    Chan(size_t size = 0);
+    Chan(size_t size);
 
     ~Chan(); // calls close
 
     void close();     // set closed_
-    bool closed(); // check closed_
-    bool exhausted();     // check l_.empty && closed_
+    bool closed();    // check closed_
+    bool exhausted(); // check l_.empty && closed_
     operator bool();  // check !(l_.empty && closed_)
 
-    bool push(const T &t);
     bool push(T &&t);
-
-    bool try_push(const T &t);
     bool try_push(T &&t);
-
     std::optional<T> pop();
     std::optional<T> try_pop();
 
@@ -67,6 +63,16 @@ class Chan {
     Iterator end();
 
   private:
+    bool push_buffered(T &&t);
+    bool push_unbuffered(T &&t);
+    bool try_push_buffered(T &&t);
+    bool try_push_unbuffered(T &&t);
+
+    std::optional<T> pop_buffered();
+    std::optional<T> pop_unbuffered();
+    std::optional<T> try_pop_buffered();
+    std::optional<T> try_pop_unbuffered();
+
     size_t next_idx(size_t idx) const;
     bool buffer_empty() const;
     bool closed_ = false;
@@ -74,6 +80,7 @@ class Chan {
     std::mutex mtx_;
     std::condition_variable cv_;
     std::vector<std::optional<T>> buffer_;
+    std::function<void(T &&)> consumer_;
     size_t ridx_ = 0;
     size_t widx_ = 0;
 };

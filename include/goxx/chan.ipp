@@ -7,7 +7,7 @@
 namespace goxx {
 
 template <class T>
-Chan<T>::Chan(size_t size) : buffer_{std::max(size_t{1}, size)} {}
+Chan<T>::Chan(size_t size) : buffer_(size) {}
 
 template <class T>
 Chan<T>::~Chan() {
@@ -39,12 +39,30 @@ void Chan<T>::close() {
 }
 
 template <class T>
-bool Chan<T>::push(const T &t) {
-    return push(std::move(T{t}));
+bool Chan<T>::push(T &&t) {
+    if (buffer_.empty())
+        return push_unbuffered(std::move(t));
+    return push_buffered(std::move(t));
 }
 
 template <class T>
-bool Chan<T>::push(T &&t) {
+bool Chan<T>::push_unbuffered(T &&t) {
+    auto ul = std::unique_lock{mtx_};
+    cv_.wait(ul, [&]() { return closed_ || consumer_; });
+    if (closed_) {
+        ul.unlock();
+        cv_.notify_all();
+        return false;
+    }
+    consumer_(std::move(t));
+    consumer_ = nullptr;
+    ul.unlock();
+    cv_.notify_all();
+    return true;
+}
+
+template <class T>
+bool Chan<T>::push_buffered(T &&t) {
     auto ul = std::unique_lock{mtx_};
     cv_.wait(ul, [&]() { return closed_ || !buffer_[widx_]; });
     if (closed_) {
@@ -73,12 +91,15 @@ bool Chan<T>::buffer_empty() const {
 }
 
 template <class T>
-bool Chan<T>::try_push(const T &t) {
-    return try_push(std::move(T{t}));
+bool Chan<T>::try_push(T &&t) {
+    if (buffer_.empty()) {
+        return try_push_unbuffered(std::move(t));
+    }
+    return try_push_buffered(std::move(t));
 }
 
 template <class T>
-bool Chan<T>::try_push(T &&t) {
+bool Chan<T>::try_push_buffered(T &&t) {
     auto ul = std::unique_lock{mtx_, std::defer_lock};
     if (!ul.try_lock()) {
         cv_.notify_all();
@@ -96,12 +117,42 @@ bool Chan<T>::try_push(T &&t) {
         res = true;
     }
     ul.unlock();
-    ul.notify_all();
+    cv_.notify_all();
     return res;
 }
 
 template <class T>
+bool Chan<T>::try_push_unbuffered(T &&t) {
+    auto ul = std::unique_lock{mtx_, std::defer_lock};
+    if (!ul.try_lock()) {
+        cv_.notify_all();
+        return false;
+    }
+    if (closed_) {
+        ul.unlock();
+        cv_.notify_all();
+        return false;
+    }
+    if (!consumer_) {
+        ul.unlock();
+        cv_.notify_all();
+        return false;
+    }
+    consumer_(std::move(t));
+    consumer_ = nullptr;
+    ul.unlock();
+    cv_.notify_all();
+    return true;
+}
+
+template <class T>
 std::optional<T> Chan<T>::pop() {
+    if (buffer_.empty())
+        return pop_unbuffered();
+    return pop_buffered();
+}
+template <class T>
+std::optional<T> Chan<T>::pop_buffered() {
     auto ul = std::unique_lock{mtx_};
     cv_.wait(ul, [&]() { return !buffer_empty() || closed_; });
     auto res = popt();
@@ -111,7 +162,33 @@ std::optional<T> Chan<T>::pop() {
 }
 
 template <class T>
+std::optional<T> Chan<T>::pop_unbuffered() {
+    auto ul = std::unique_lock{mtx_};
+    cv_.wait(ul, [&]() { return !consumer_ || closed_; });
+    if (closed_) {
+        ul.unlock();
+        cv_.notify_all();
+        return std::nullopt;
+    }
+    std::optional<T> res;
+    consumer_ = [&res](T &&t) { res = std::move(t); };
+    cv_.notify_all();
+    cv_.wait(ul, [&]() { return res.has_value() || closed_; });
+    consumer_ = nullptr;
+    ul.unlock();
+    cv_.notify_all();
+    return std::move(res);
+}
+
+template <class T>
 std::optional<T> Chan<T>::try_pop() {
+    if (buffer_.empty())
+        return try_pop_unbuffered();
+    return try_pop_buffered();
+}
+
+template <class T>
+std::optional<T> Chan<T>::try_pop_buffered() {
     auto ul = std::unique_lock{mtx_, std::defer_lock};
     if (!ul.try_lock()) {
         cv_.notify_all();
@@ -124,13 +201,45 @@ std::optional<T> Chan<T>::try_pop() {
 }
 
 template <class T>
+std::optional<T> Chan<T>::try_pop_unbuffered() {
+    auto ul = std::unique_lock{mtx_, std::defer_lock};
+    if (!ul.try_lock()) {
+        cv_.notify_all();
+        return std::nullopt;
+    }
+    if (consumer_) {
+        ul.unlock();
+        cv_.notify_all();
+        return std::nullopt;
+    }
+    std::optional<T> res;
+    consumer_ = [&res](T &&t) { res = std::move(t); };
+    ul.unlock();
+    cv_.notify_all();
+    this_thread::yield();
+    ul.lock();
+    consumer_ = nullptr;
+    ul.unlock();
+    cv_.notify_all();
+    return std::move(res);
+}
+
+template <class T>
 std::optional<T> Chan<T>::popt() {
-    std::optional<T> res{std::move(buffer_[ridx_])};
-    buffer_[ridx_].reset();
+    std::optional<T> res;
+    res.swap(buffer_[ridx_]);
     ridx_ = next_idx(ridx_);
-    return res;
+    return std::move(res);
 }
 /* range expression */
+
+/* begin iterator */
+template <class T>
+typename Chan<T>::Iterator Chan<T>::begin() {
+    Iterator res{*this};
+    res.tmp_ = std::move(pop());
+    return res;
+}
 
 /* != */
 template <class T>
@@ -138,28 +247,21 @@ bool Chan<T>::Iterator::operator!=(const Chan<T>::Iterator &) const {
     return tmp_.has_value();
 }
 
+template <class T>
+T Chan<T>::Iterator::operator*() {
+    // goxx_defer([this]() { tmp_.reset(); });
+    return std::move(*tmp_);
+}
+
 /* iterate */
 template <class T>
 void Chan<T>::Iterator::operator++() {
-    tmp_ = c_.pop();
+    tmp_ = std::move(c_.pop());
 }
 
-template <class T>
-T Chan<T>::Iterator::operator*() {
-    goxx_defer([this]() { tmp_.reset(); });
-    return std::move(*tmp_);
-}
 /* construct iterator */
 template <class T>
 Chan<T>::Iterator::Iterator(Chan<T> &c) : c_(c) {}
-
-/* begin iterator */
-template <class T>
-typename Chan<T>::Iterator Chan<T>::begin() {
-    Iterator res{*this};
-    res.tmp_ = pop();
-    return res;
-}
 
 /* end iterator */
 template <class T>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "goxx/annoymous.hpp"
+#include "goxx/cases.hpp"
 #include "goxx/chan.hpp"
 #include "goxx/defer.hpp"
 #include "goxx/elapse.hpp"
