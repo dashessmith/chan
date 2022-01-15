@@ -48,20 +48,14 @@ bool Chan<T>::push(const T &t) {
 template <class T>
 bool Chan<T>::push(T &&t) {
     auto ul = std::unique_lock{mtx_};
-    cv_.wait(ul, [&]() {
-        return closed_ || !buffer_[widx_] || !buffer_[next_idx(widx_)];
-    });
+    cv_.wait(ul, [&]() { return closed_ || !buffer_[widx_]; });
     if (closed_) {
         ul.unlock();
         cv_.notify_all();
         return false;
     }
-    if (!buffer_[widx_]) {
-        buffer_[widx_] = std::move(t);
-    } else {
-        widx_ = next_idx(widx_);
-        buffer_[widx_] = std::move(t);
-    }
+
+    buffer_[widx_] = std::move(t);
     widx_ = next_idx(widx_);
     ul.unlock();
     cv_.notify_all();
@@ -101,10 +95,6 @@ bool Chan<T>::try_push(T &&t) {
     if (!buffer_[widx_]) {
         buffer_[widx_] = std::move(t);
         widx_ = next_idx(widx_);
-        res = true;
-    } else if (next = next_idx(widx_); !buffer[next]) {
-        buffer_[next] = std::move(t);
-		widx_ = next_idx(next);
         res = true;
     }
     ul.unlock();

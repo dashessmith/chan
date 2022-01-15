@@ -13,7 +13,7 @@ using namespace goxx;
 void test_chan() {
     Chan<void *> ch;
     auto num_threads = thread::hardware_concurrency();
-    for (auto verbose : {false})
+    for (auto verbose : {true, false})
         for (auto count : {1000000})
             for (auto nth : {num_threads})
                 for (size_t csize : {0, 1, 2, 4, 8, 16, 1024}) {
