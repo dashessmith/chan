@@ -7,8 +7,7 @@ struct GetOption {
     bool permanent = false;
 };
 
-template <class Dependency, class Creator,
-          class Storagetype = Dependency>
+template <class Dependency, class Creator, class Storagetype = Dependency>
 auto get(Creator &&creator, const GetOption &option = GetOption{})
     -> std::shared_ptr<Storagetype>;
 

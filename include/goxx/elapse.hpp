@@ -3,8 +3,7 @@
 #include <functional>
 
 namespace goxx {
-std::chrono::steady_clock::duration elapse(std::function<void()> f);
-
+auto elapse(std::function<void()> f) -> std::chrono::steady_clock::duration;
 } // namespace goxx
 
 #include "goxx/elapse.ipp"
