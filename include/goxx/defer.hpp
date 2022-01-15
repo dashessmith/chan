@@ -4,7 +4,6 @@
 
 namespace goxx {
 
-#define goxx_defer(f) Defer goxx_{f};
 class Defer {
   public:
     Defer(std::function<void()> f);
@@ -15,5 +14,7 @@ class Defer {
 };
 
 } // namespace goxx
+
+#define goxx_defer(f) Defer goxx_annoy{f};
 
 #include "goxx/defer.ipp"
