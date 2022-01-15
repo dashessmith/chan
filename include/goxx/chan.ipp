@@ -7,9 +7,7 @@
 namespace goxx {
 
 template <class T>
-Chan<T>::Chan(size_t size) : buffer_size_{std::max(size_t{1}, size)} {
-    buffer_.resize(buffer_size_);
-}
+Chan<T>::Chan(size_t size) : buffer_{std::max(size_t{1}, size)} {}
 
 template <class T>
 Chan<T>::~Chan() {
@@ -17,7 +15,7 @@ Chan<T>::~Chan() {
 }
 
 template <class T>
-bool Chan<T>::is_closed() {
+bool Chan<T>::closed() {
     return closed_;
 }
 
@@ -65,7 +63,7 @@ bool Chan<T>::push(T &&t) {
 template <class T>
 size_t Chan<T>::next_idx(size_t idx) const {
     ++idx;
-    if (idx >= buffer_size_)
+    if (idx >= buffer_.size())
         idx = 0;
     return idx;
 }

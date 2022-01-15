@@ -1,9 +1,11 @@
 #include "goxx/goxx.hpp"
 #include <algorithm>
+#include <any>
 #include <chrono>
 #include <cstdio>
 #include <deque>
 #include <iostream>
+#include <map>
 #include <mutex>
 
 using namespace std;
@@ -177,11 +179,56 @@ void test_get() {
     x = goxx::get<vector<Shouter>>({.tag = "123456"});
 }
 
+void test_any() {
+    auto ch = make_shared<Chan<any>>(1024);
+    auto wg = make_shared<WaitGroup>();
+    goxx_defer([&]() { wg->wait(); });
+    wg->go([&]() {
+        for (auto i = 0; i < 10; i++) {
+            switch (i) {
+            case 0:
+                ch->push(0);
+                break;
+            case 1:
+                ch->push(vector<int>{1, 2, 3});
+                break;
+            case 2:
+                ch->push(map<string, string>{{"123", "456"}});
+                break;
+            case 3:
+                ch->push("123fdsa");
+                break;
+            case 4:
+                ch->push("jfidjfidss"s);
+                break;
+            default:
+                ch->push(i);
+                break;
+            }
+        }
+        ch->close();
+    });
+
+    wg->go([&]() {
+        this_thread::sleep_for(3s);
+        for (auto x : *ch) {
+            if (x.type() == typeid(int)) {
+                cout << "x=" << any_cast<int>(x) << "\n";
+            } else if (x.type() == typeid(string)) {
+                cout << "x=" << any_cast<string>(x) << "\n";
+            } else {
+                cout << "x=" << x.type().name() << "\n";
+            }
+        }
+    });
+}
+
 int main() {
-    test_chan();
-    // test_mt_sort_origin();
-    // test_mt_sort();
-    // test_priority_queue();
-    // test_get();
+    // test_chan();
+    //  test_mt_sort_origin();
+    //  test_mt_sort();
+    //  test_priority_queue();
+    //  test_get();
+    test_any();
     return 0;
 }

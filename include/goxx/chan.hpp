@@ -32,7 +32,7 @@ class Chan {
     ~Chan(); // calls close
 
     void close();     // set closed_
-    bool is_closed(); // check closed_
+    bool closed(); // check closed_
     bool exhausted();     // check l_.empty && closed_
     operator bool();  // check !(l_.empty && closed_)
 
@@ -76,7 +76,6 @@ class Chan {
     std::vector<std::optional<T>> buffer_;
     size_t ridx_ = 0;
     size_t widx_ = 0;
-    size_t buffer_size_ = 0;
 };
 
 } // namespace goxx
