@@ -10,7 +10,7 @@ namespace internal {
 
 template <class Dependency>
 auto get(std::function<std::shared_ptr<std::decay_t<Dependency>>()> &&creator,
-         const getOption &option) -> std::shared_ptr<std::decay_t<Dependency>> {
+         const GetOption &option) -> std::shared_ptr<std::decay_t<Dependency>> {
 
     using Returntype = std::decay_t<Dependency>;
 
@@ -72,7 +72,7 @@ auto get(std::function<std::shared_ptr<std::decay_t<Dependency>>()> &&creator,
 } // namespace internal
 
 template <class Dependency, class Creator>
-auto get(Creator &&creator, const getOption &option)
+auto get(Creator &&creator, const GetOption &option)
     -> std::shared_ptr<std::decay_t<Dependency>> {
     return internal::get<Dependency>(
         [&creator]() -> std::shared_ptr<Dependency> {
@@ -82,7 +82,7 @@ auto get(Creator &&creator, const getOption &option)
 }
 
 template <class Dependency>
-auto get(const getOption &option) -> std::shared_ptr<std::decay_t<Dependency>> {
+auto get(const GetOption &option) -> std::shared_ptr<std::decay_t<Dependency>> {
     return internal::get<Dependency>(
         []() { return make_shared<std::decay_t<Dependency>>(); }, option);
 }

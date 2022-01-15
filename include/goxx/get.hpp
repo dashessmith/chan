@@ -2,17 +2,17 @@
 #include <memory>
 #include <string>
 namespace goxx {
-struct getOption {
+struct GetOption {
     std::string tag;
     bool permanent = false;
 };
 
 template <class Dependency, class Creator>
-auto get(Creator &&creator, const getOption &option = getOption{})
+auto get(Creator &&creator, const GetOption &option = GetOption{})
     -> std::shared_ptr<std::decay_t<Dependency>>;
 
 template <class Dependency>
-auto get(const getOption &option = getOption{})
+auto get(const GetOption &option = GetOption{})
     -> std::shared_ptr<std::decay_t<Dependency>>;
 
 } // namespace goxx
