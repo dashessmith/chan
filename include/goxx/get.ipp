@@ -1,5 +1,4 @@
 #pragma once
-#include "goxx/goxx.hpp"
 #include <memory>
 #include <shared_mutex>
 #include <typeindex>

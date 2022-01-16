@@ -2,15 +2,10 @@
 #pragma once
 
 #include "goxx/defer.hpp"
-#include <cassert>
-#include <chrono>
 #include <condition_variable>
 #include <functional>
-#include <list>
 #include <mutex>
 #include <optional>
-#include <queue>
-#include <unordered_set>
 #include <utility>
 
 namespace goxx {
