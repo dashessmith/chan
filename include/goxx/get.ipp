@@ -81,7 +81,7 @@ auto get(Creator &&creator, const GetOption &option)
 template <class Dependency, class Storagetype>
 auto get(const GetOption &option) -> std::shared_ptr<Storagetype> {
     return internal::get<Storagetype>(
-        []() { return std::make_shared<Storagetype>(); }, option);
+        []() { return std::shared_ptr<Storagetype>{}; }, option);
 }
 
 } // namespace goxx
