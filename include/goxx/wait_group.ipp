@@ -45,7 +45,7 @@ void WaitGroup::together(
         }
         return;
     }
-    auto inner = std::shared_ptr<WaitGroup>{};
+    auto inner = std::make_shared<WaitGroup>();
     inner->together([f](size_t tidx, size_t nthds) { f(tidx, nthds); }, nullptr,
                     nt);
     this->go([inner, final]() {
